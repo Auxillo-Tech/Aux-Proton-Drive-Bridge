@@ -4,11 +4,11 @@ Aux Proton Bridge is distributed as Linux release artifacts from GitHub Releases
 
 Release page:
 
-<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.1.0>
+<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.2.0>
 
 > The repository/release may be private until Auxillo changes repository visibility to public.
 
-## Supported targets for v0.1.0
+## Supported targets for v0.2.0
 
 | Linux family | Recommended artifact | Notes |
 |---|---|---|
@@ -50,14 +50,14 @@ Download `SHA256SUMS.txt` from the same release as the package, then verify from
 sha256sum -c SHA256SUMS.txt
 ```
 
-Expected v0.1.0 assets:
+Expected v0.2.0 assets:
 
 ```text
-Aux.Proton.Bridge-0.1.0-x86_64.AppImage
-Aux.Proton.Bridge-0.1.0-amd64.deb
-Aux.Proton.Bridge-0.1.0-x86_64.rpm
-aux-proton-bridge-0.1.0-source.tar.gz
-aux-proton-bridge-0.1.0-source.zip
+Aux.Proton.Bridge-0.2.0-x86_64.AppImage
+Aux.Proton.Bridge-0.2.0-amd64.deb
+Aux.Proton.Bridge-0.2.0-x86_64.rpm
+aux-proton-bridge-0.2.0-source.tar.gz
+aux-proton-bridge-0.2.0-source.zip
 SHA256SUMS.txt
 release-manifest.json
 ```
@@ -67,7 +67,7 @@ release-manifest.json
 Download:
 
 ```text
-Aux.Proton.Bridge-0.1.0-amd64.deb
+Aux.Proton.Bridge-0.2.0-amd64.deb
 ```
 
 Option A — graphical install:
@@ -79,13 +79,13 @@ Option A — graphical install:
 Option B — terminal install:
 
 ```bash
-sudo apt install ./Aux.Proton.Bridge-0.1.0-amd64.deb
+sudo apt install ./Aux.Proton.Bridge-0.2.0-amd64.deb
 ```
 
 If using `dpkg` directly:
 
 ```bash
-sudo dpkg -i ./Aux.Proton.Bridge-0.1.0-amd64.deb
+sudo dpkg -i ./Aux.Proton.Bridge-0.2.0-amd64.deb
 sudo apt -f install
 ```
 
@@ -100,13 +100,13 @@ sudo apt remove aux-proton-bridge
 Download:
 
 ```text
-Aux.Proton.Bridge-0.1.0-x86_64.rpm
+Aux.Proton.Bridge-0.2.0-x86_64.rpm
 ```
 
 Install:
 
 ```bash
-sudo dnf install ./Aux.Proton.Bridge-0.1.0-x86_64.rpm
+sudo dnf install ./Aux.Proton.Bridge-0.2.0-x86_64.rpm
 ```
 
 Launch **Aux Proton Bridge** from the application menu.
@@ -124,13 +124,13 @@ Download the `.rpm` asset.
 Install:
 
 ```bash
-sudo dnf install ./Aux.Proton.Bridge-0.1.0-x86_64.rpm
+sudo dnf install ./Aux.Proton.Bridge-0.2.0-x86_64.rpm
 ```
 
 or on older systems:
 
 ```bash
-sudo yum install ./Aux.Proton.Bridge-0.1.0-x86_64.rpm
+sudo yum install ./Aux.Proton.Bridge-0.2.0-x86_64.rpm
 ```
 
 ## Install on openSUSE
@@ -140,29 +140,29 @@ Download the `.rpm` asset.
 Install:
 
 ```bash
-sudo zypper install ./Aux.Proton.Bridge-0.1.0-x86_64.rpm
+sudo zypper install ./Aux.Proton.Bridge-0.2.0-x86_64.rpm
 ```
 
 ## Install on Arch / Manjaro / EndeavourOS
 
-Use the AppImage for v0.1.0.
+Use the AppImage for v0.2.0.
 
 Download:
 
 ```text
-Aux.Proton.Bridge-0.1.0-x86_64.AppImage
+Aux.Proton.Bridge-0.2.0-x86_64.AppImage
 ```
 
 Make it executable:
 
 ```bash
-chmod +x ./Aux.Proton.Bridge-0.1.0-x86_64.AppImage
+chmod +x ./Aux.Proton.Bridge-0.2.0-x86_64.AppImage
 ```
 
 Run:
 
 ```bash
-./Aux.Proton.Bridge-0.1.0-x86_64.AppImage
+./Aux.Proton.Bridge-0.2.0-x86_64.AppImage
 ```
 
 Future work: AUR package.
@@ -172,8 +172,8 @@ Future work: AUR package.
 Use the AppImage.
 
 ```bash
-chmod +x ./Aux.Proton.Bridge-0.1.0-x86_64.AppImage
-./Aux.Proton.Bridge-0.1.0-x86_64.AppImage
+chmod +x ./Aux.Proton.Bridge-0.2.0-x86_64.AppImage
+./Aux.Proton.Bridge-0.2.0-x86_64.AppImage
 ```
 
 If AppImage does not launch because FUSE is missing, see [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
@@ -226,7 +226,7 @@ dist/
 
 ## Current packaging limitations
 
-- v0.1.0 packages are unsigned.
-- v0.1.0 is x64 only.
+- v0.2.0 packages are unsigned.
+- v0.2.0 is x64 only.
 - AppImage is the fallback for distros without `.deb`/`.rpm` support.
 - Wider distro qualification is still pending.

@@ -4,8 +4,8 @@ Status: engineering MVP / private beta foundation.
 
 ## Current release candidate
 
-- Version: 0.1.0
-- GitHub release: <https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.1.0>
+- Version: 0.2.0
+- GitHub release: <https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.2.0>
 - Generated release metadata: `dist/release-manifest.json`
 - Canonical checksums: `dist/SHA256SUMS.txt`
 
@@ -22,13 +22,13 @@ Do not copy mutable source-archive hashes into this file; this file is included 
 
 ## Release artifacts
 
-The v0.1.0 release set contains:
+The v0.2.0 release set contains:
 
-- `Aux.Proton.Bridge-0.1.0-x86_64.AppImage`
-- `Aux.Proton.Bridge-0.1.0-amd64.deb`
-- `Aux.Proton.Bridge-0.1.0-x86_64.rpm`
-- `aux-proton-bridge-0.1.0-source.tar.gz`
-- `aux-proton-bridge-0.1.0-source.zip`
+- `Aux.Proton.Bridge-0.2.0-x86_64.AppImage`
+- `Aux.Proton.Bridge-0.2.0-amd64.deb`
+- `Aux.Proton.Bridge-0.2.0-x86_64.rpm`
+- `aux-proton-bridge-0.2.0-source.tar.gz`
+- `aux-proton-bridge-0.2.0-source.zip`
 - `SHA256SUMS.txt`
 - `release-manifest.json`
 
