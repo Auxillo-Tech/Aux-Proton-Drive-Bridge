@@ -48,6 +48,46 @@ function renderFiles() {
   }
 }
 
+function formatWhen(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+}
+
+function operationSummary(op) {
+  const options = op.options || {};
+  if (Array.isArray(options.paths) && options.paths.length) return options.paths.slice(0, 3).join(', ') + (options.paths.length > 3 ? ` +${options.paths.length - 3}` : '');
+  if (Array.isArray(options.localPaths) && options.localPaths.length) return options.localPaths.slice(0, 3).join(', ') + (options.localPaths.length > 3 ? ` +${options.localPaths.length - 3}` : '');
+  return options.path || options.localFolder || '—';
+}
+
+async function refreshHistory() {
+  const history = await api.getOperationHistory();
+  const container = $('operationHistory');
+  if (!history.length) {
+    container.className = 'history-list empty';
+    container.textContent = 'No transfer history yet.';
+    return;
+  }
+  container.className = 'history-list';
+  container.innerHTML = '';
+  for (const op of history) {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    const action = document.createElement('strong');
+    action.textContent = op.action;
+    const status = document.createElement('span');
+    status.className = `badge ${op.status}`;
+    status.textContent = op.status;
+    const summary = document.createElement('small');
+    summary.textContent = operationSummary(op);
+    const time = document.createElement('small');
+    time.textContent = formatWhen(op.finishedAt || op.updatedAt || op.startedAt);
+    row.append(action, status, summary, time);
+    container.append(row);
+  }
+}
+
 async function refreshStatus() {
   const status = await api.getStatus();
   setStatus(status);
@@ -75,8 +115,10 @@ async function run(label, fn) {
     if (result?.stderr) log(result.stderr.trim(), 'warn');
     log(`${label} finished.`);
     await refreshStatus();
+    await refreshHistory();
   } catch (err) {
     log(err?.message || String(err), 'error');
+    await refreshHistory().catch(() => undefined);
   }
 }
 
@@ -86,6 +128,11 @@ $('refreshBtn').addEventListener('click', () => run('Refresh', refreshFiles));
 $('loginBtn').addEventListener('click', () => run('Login', () => api.login()));
 $('logoutBtn').addEventListener('click', () => run('Logout', () => api.logout()));
 $('clearLogBtn').addEventListener('click', () => { logOutput.textContent = ''; });
+$('clearHistoryBtn').addEventListener('click', () => run('Clear history', async () => {
+  await api.clearOperationHistory();
+  await refreshHistory();
+  return { stdout: 'Transfer history cleared.' };
+}));
 $('chooseFolderBtn').addEventListener('click', async () => {
   const folder = await api.chooseLocalFolder();
   if (folder) { state.localFolder = folder; $('localFolderInput').value = folder; }
@@ -112,6 +159,7 @@ $('uploadBtn').addEventListener('click', async () => {
 async function boot() {
   state.localFolder = await api.getDefaultLocalFolder();
   $('localFolderInput').value = state.localFolder;
+  await refreshHistory();
   const status = await refreshStatus();
   if (!status.busy && status.authenticated) refreshFiles().catch(err => log(err.message, 'error'));
   if (status.busy) log('Proton CLI cache is currently busy. Wait for the active download to finish, then refresh.', 'warn');
