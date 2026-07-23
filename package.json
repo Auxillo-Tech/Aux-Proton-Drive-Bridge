@@ -1,0 +1,19 @@
+{
+  "name": "aux-proton-bridge",
+  "version": "0.1.0",
+  "description": "Unofficial Linux desktop bridge for Proton Drive using the official Proton Drive CLI.",
+  "main": "src/main/main.js",
+  "license": "MIT",
+  "author": "Auxillo",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "check": "npm test && node test/static-check.js",
+    "test": "node --test test/*.test.js",
+    "smoke:source": "node scripts/smoke-source.js"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0"
+  }
+}
