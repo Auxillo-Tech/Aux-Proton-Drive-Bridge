@@ -29,6 +29,13 @@ h2 { margin: 0 0 6px; }
 .path-row { display: flex; gap: 8px; margin-top: 8px; }
 .path-row button { flex: 0 0 auto; }
 .note { margin-top: 16px; color: #bac4df; line-height: 1.45; background: rgba(69,210,255,.08); border: 1px solid rgba(69,210,255,.2); border-radius: 14px; padding: 12px; }
+.backup-box { margin-top: 18px; border-top: 1px solid #242c40; padding-top: 16px; }
+.backup-box h3 { margin: 0 0 10px; }
+.check-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 12px; color: #d7def5; }
+.check-row input { width: auto; }
+.mini-list { margin-top: 10px; border: 1px solid #242c40; border-radius: 12px; max-height: 110px; overflow: auto; padding: 8px; font-size: 12px; color: #d7def5; overflow-wrap: anywhere; }
+.mini-list.empty { color: #9ba8c7; }
+.mini-note { color: #9ba8c7; font-size: 12px; line-height: 1.4; }
 .log-panel, .history-panel { margin-top: 18px; }
 .history-list { border: 1px solid #242c40; border-radius: 14px; overflow: hidden; max-height: 260px; overflow-y: auto; }
 .history-list.empty { padding: 18px; color: #9ba8c7; }

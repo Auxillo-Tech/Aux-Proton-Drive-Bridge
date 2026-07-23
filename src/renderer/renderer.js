@@ -1,5 +1,5 @@
 const api = window.auxProtonBridge;
-const state = { items: [], selected: new Set(), localFolder: '' };
+const state = { items: [], selected: new Set(), localFolder: '', backupProfile: null };
 
 const $ = (id) => document.getElementById(id);
 const logOutput = $('logOutput');
@@ -88,6 +88,39 @@ async function refreshHistory() {
   }
 }
 
+async function refreshBackupProfile() {
+  const profile = await api.getBackupProfile();
+  state.backupProfile = profile;
+  $('backupEnabledInput').checked = Boolean(profile.enabled);
+  $('backupRemoteInput').value = profile.remoteParentPath || '/my-files';
+  renderBackupPaths();
+  return profile;
+}
+
+function renderBackupPaths() {
+  const list = $('backupPathList');
+  const paths = state.backupProfile?.localPaths || [];
+  if (!paths.length) {
+    list.className = 'mini-list empty';
+    list.textContent = 'No backup paths selected.';
+    return;
+  }
+  list.className = 'mini-list';
+  list.textContent = paths.join('\n');
+}
+
+function currentBackupProfileFromForm() {
+  return {
+    ...(state.backupProfile || {}),
+    enabled: $('backupEnabledInput').checked,
+    remoteParentPath: $('backupRemoteInput').value || '/my-files',
+    localPaths: state.backupProfile?.localPaths || [],
+    fileConflictStrategy: 'skip',
+    folderConflictStrategy: 'merge',
+    deletePropagation: false
+  };
+}
+
 async function refreshStatus() {
   const status = await api.getStatus();
   setStatus(status);
@@ -155,11 +188,24 @@ $('uploadBtn').addEventListener('click', async () => {
   if (!localPaths.length) return log('Upload cancelled.', 'warn');
   return run('Upload', () => api.uploadPaths({ localPaths, parentPath: '/my-files', fileConflictStrategy: 'skip', folderConflictStrategy: 'merge' }));
 });
+$('chooseBackupPathsBtn').addEventListener('click', async () => {
+  const localPaths = await api.chooseBackupPaths();
+  if (!localPaths.length) return log('Backup path selection cancelled.', 'warn');
+  state.backupProfile = { ...currentBackupProfileFromForm(), localPaths };
+  renderBackupPaths();
+});
+$('saveBackupProfileBtn').addEventListener('click', () => run('Save backup profile', async () => {
+  state.backupProfile = await api.saveBackupProfile(currentBackupProfileFromForm());
+  renderBackupPaths();
+  return { stdout: 'One-way backup profile saved.' };
+}));
+$('runBackupProfileBtn').addEventListener('click', () => run('Run backup profile', () => api.runBackupProfile()));
 
 async function boot() {
   state.localFolder = await api.getDefaultLocalFolder();
   $('localFolderInput').value = state.localFolder;
   await refreshHistory();
+  await refreshBackupProfile();
   const status = await refreshStatus();
   if (!status.busy && status.authenticated) refreshFiles().catch(err => log(err.message, 'error'));
   if (status.busy) log('Proton CLI cache is currently busy. Wait for the active download to finish, then refresh.', 'warn');

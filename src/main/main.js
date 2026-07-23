@@ -3,15 +3,22 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { DEFAULT_LOCAL_FOLDER, getStatus, parseListOutput, runProton } = require('./protonCli');
 const { createOperationStore } = require('./operationStore');
+const { createProfileStore } = require('./profileStore');
 
 app.disableHardwareAcceleration();
 
 let mainWindow;
 let operationStore;
+let profileStore;
 
 function getOperationStore() {
   if (!operationStore) operationStore = createOperationStore(path.join(app.getPath('userData'), 'operations.json'));
   return operationStore;
+}
+
+function getProfileStore() {
+  if (!profileStore) profileStore = createProfileStore(path.join(app.getPath('userData'), 'profiles.json'));
+  return profileStore;
 }
 
 function sendProgress(payload) {
@@ -80,6 +87,11 @@ ipcMain.handle('proton:chooseUploadPaths', async () => {
   if (result.canceled) return [];
   return result.filePaths;
 });
+ipcMain.handle('proton:chooseBackupPaths', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'openDirectory', 'multiSelections'] });
+  if (result.canceled) return [];
+  return result.filePaths;
+});
 ipcMain.handle('proton:openFolder', async (_event, folder) => {
   const target = folder || DEFAULT_LOCAL_FOLDER;
   fs.mkdirSync(target, { recursive: true });
@@ -105,6 +117,22 @@ ipcMain.handle('proton:uploadPaths', async (_event, options = {}) => {
 });
 ipcMain.handle('proton:getOperationHistory', async () => getOperationStore().list(50));
 ipcMain.handle('proton:clearOperationHistory', async () => { getOperationStore().clear(); return []; });
+ipcMain.handle('proton:getBackupProfile', async () => getProfileStore().getDefaultBackupProfile());
+ipcMain.handle('proton:saveBackupProfile', async (_event, profile = {}) => getProfileStore().saveDefaultBackupProfile(profile));
+ipcMain.handle('proton:runBackupProfile', async () => {
+  const profile = getProfileStore().getDefaultBackupProfile();
+  if (!profile.enabled) throw new Error('Backup profile is disabled. Enable and save it first.');
+  if (!profile.localPaths.length) throw new Error('Backup profile has no local paths. Add folders/files first.');
+  const options = {
+    localPaths: profile.localPaths,
+    parentPath: profile.remoteParentPath || '/my-files',
+    fileConflictStrategy: profile.fileConflictStrategy || 'skip',
+    folderConflictStrategy: profile.folderConflictStrategy || 'merge',
+    deletePropagation: false
+  };
+  const result = await recordOperation('runBackupProfile', options, (eventSink) => runProton('upload', options, eventSink));
+  return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
+});
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
