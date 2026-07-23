@@ -53,6 +53,18 @@
         </label>
         <button id="downloadAllBtn" class="wide">Download everything</button>
         <button id="uploadBtn" class="wide secondary">Upload files/folders</button>
+        <div class="backup-box">
+          <h3>One-way backup profile</h3>
+          <label class="check-row"><input id="backupEnabledInput" type="checkbox" /> Enable profile</label>
+          <label>Remote backup folder
+            <input id="backupRemoteInput" value="/my-files" />
+          </label>
+          <button id="chooseBackupPathsBtn" class="wide secondary">Choose backup paths</button>
+          <div id="backupPathList" class="mini-list empty">No backup paths selected.</div>
+          <button id="saveBackupProfileBtn" class="wide secondary">Save backup profile</button>
+          <button id="runBackupProfileBtn" class="wide">Run backup now</button>
+          <p class="mini-note">Conservative mode: uploads only, skips existing files, merges folders, never propagates deletes.</p>
+        </div>
         <div class="note">
           <strong>Safe defaults:</strong> downloads merge folders and skip existing files. Proton credentials stay in the Proton CLI/OS secret store.
         </div>
