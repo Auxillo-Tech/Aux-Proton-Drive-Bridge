@@ -55,7 +55,9 @@ function parseListOutput(output) {
     });
 }
 
-function runProton(action, options = {}, eventSink) {
+let protonQueue = Promise.resolve();
+
+function runProtonNow(action, options = {}, eventSink) {
   const { bin, args } = buildCommand(action, options);
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { shell: false, windowsHide: true, env: { ...process.env, PROTON_DRIVE_LOG_LEVEL: options.logLevel || 'ERROR' } });
@@ -79,6 +81,12 @@ function runProton(action, options = {}, eventSink) {
       }
     });
   });
+}
+
+function runProton(action, options = {}, eventSink) {
+  const job = protonQueue.catch(() => undefined).then(() => runProtonNow(action, options, eventSink));
+  protonQueue = job;
+  return job;
 }
 
 async function getStatus() {
