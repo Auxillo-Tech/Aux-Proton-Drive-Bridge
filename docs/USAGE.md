@@ -17,7 +17,7 @@ A Linux desktop bridge for manual Proton Drive operations:
 
 ## What it is not yet
 
-v0.1.0 is **not yet** a full bidirectional sync daemon.
+v0.2.0 is **not yet** a full bidirectional sync daemon.
 
 It does not yet provide:
 

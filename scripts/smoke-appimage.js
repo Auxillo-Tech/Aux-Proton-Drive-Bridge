@@ -6,8 +6,9 @@ const childProcess = require('node:child_process');
 
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
-const appImage = fs.readdirSync(dist).find(name => name.endsWith('.AppImage'));
-if (!appImage) throw new Error('No AppImage found in dist/');
+const version = require(path.join(root, 'package.json')).version;
+const appImage = fs.readdirSync(dist).find(name => name === `Aux Proton Bridge-${version}-x86_64.AppImage`);
+if (!appImage) throw new Error(`No AppImage for version ${version} found in dist/`);
 const appPath = path.join(dist, appImage);
 fs.chmodSync(appPath, 0o755);
 const env = {

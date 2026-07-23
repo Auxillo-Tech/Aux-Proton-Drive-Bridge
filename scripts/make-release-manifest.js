@@ -5,7 +5,9 @@ const childProcess = require('node:child_process');
 
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
-const files = fs.existsSync(dist) ? fs.readdirSync(dist).filter(name => /\.(AppImage|deb|rpm|tar\.gz|zip)$/.test(name)).sort() : [];
+const version = require(path.join(root, 'package.json')).version;
+const productPattern = new RegExp(`^(Aux Proton Bridge-${version}-.+\\.(AppImage|deb|rpm)|aux-proton-bridge-${version}-source\\.(tar\\.gz|zip))$`);
+const files = fs.existsSync(dist) ? fs.readdirSync(dist).filter(name => productPattern.test(name)).sort() : [];
 const artifacts = files.map(name => {
   const p = path.join(dist, name);
   const data = fs.readFileSync(p);
@@ -13,7 +15,7 @@ const artifacts = files.map(name => {
 });
 const manifest = {
   product: 'Aux Proton Bridge',
-  version: require(path.join(root, 'package.json')).version,
+  version,
   generatedAt: new Date().toISOString(),
   gitCommit: childProcess.execSync('git rev-parse HEAD', { cwd: root, encoding: 'utf8' }).trim(),
   artifacts,
