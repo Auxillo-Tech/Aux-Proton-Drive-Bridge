@@ -6,7 +6,7 @@ Unofficial Linux desktop bridge for Proton Drive using Proton's official `proton
 
 ## Status
 
-Version `0.2.0` is a working Linux MVP / private-beta foundation.
+Version `0.2.1` is a working Linux MVP / private-beta foundation.
 
 Aux Proton Bridge gives Linux users a GUI for common Proton Drive operations through Proton's official CLI. It is usable for manual listing, download, and upload workflows. It is **not yet** a Dropbox-style bidirectional sync daemon.
 
@@ -14,7 +14,7 @@ Aux Proton Bridge gives Linux users a GUI for common Proton Drive operations thr
 
 GitHub release:
 
-<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.2.0>
+<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.2.1>
 
 Release assets include:
 
@@ -65,7 +65,7 @@ Existing local files should not be overwritten by default.
 Download:
 
 ```text
-Aux.Proton.Bridge-0.2.0-x86_64.AppImage
+Aux.Proton.Bridge-0.2.1-x86_64.AppImage
 ```
 
 Then make it executable and run it from your file manager or terminal.
@@ -75,7 +75,7 @@ Then make it executable and run it from your file manager or terminal.
 Download:
 
 ```text
-Aux.Proton.Bridge-0.2.0-amd64.deb
+Aux.Proton.Bridge-0.2.1-amd64.deb
 ```
 
 Install with your graphical package installer or with `apt`/`dpkg`.
@@ -85,7 +85,7 @@ Install with your graphical package installer or with `apt`/`dpkg`.
 Download:
 
 ```text
-Aux.Proton.Bridge-0.2.0-x86_64.rpm
+Aux.Proton.Bridge-0.2.1-x86_64.rpm
 ```
 
 Install with your graphical package installer, `dnf`, `zypper`, or `rpm`.
