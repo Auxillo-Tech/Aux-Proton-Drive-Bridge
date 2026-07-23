@@ -29,6 +29,15 @@ h2 { margin: 0 0 6px; }
 .path-row { display: flex; gap: 8px; margin-top: 8px; }
 .path-row button { flex: 0 0 auto; }
 .note { margin-top: 16px; color: #bac4df; line-height: 1.45; background: rgba(69,210,255,.08); border: 1px solid rgba(69,210,255,.2); border-radius: 14px; padding: 12px; }
-.log-panel { margin-top: 18px; }
+.log-panel, .history-panel { margin-top: 18px; }
+.history-list { border: 1px solid #242c40; border-radius: 14px; overflow: hidden; max-height: 260px; overflow-y: auto; }
+.history-list.empty { padding: 18px; color: #9ba8c7; }
+.history-row { display: grid; grid-template-columns: 130px 100px 1fr 180px; gap: 12px; align-items: start; padding: 12px 14px; border-bottom: 1px solid #20283a; }
+.history-row:last-child { border-bottom: 0; }
+.history-row small { display: block; overflow-wrap: anywhere; }
+.badge { display: inline-flex; width: max-content; align-items: center; border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 800; text-transform: uppercase; background: #263047; color: #d7def5; }
+.badge.succeeded { background: rgba(73,242,157,.14); color: #8dffc4; }
+.badge.failed { background: rgba(255,77,109,.14); color: #ff9aae; }
+.badge.running { background: rgba(255,209,102,.14); color: #ffe19a; }
 pre { margin: 0; min-height: 140px; max-height: 240px; overflow: auto; white-space: pre-wrap; color: #d6def7; background: #05070c; border: 1px solid #242c40; border-radius: 14px; padding: 14px; }
-@media (max-width: 920px) { .hero, .grid { grid-template-columns: 1fr; display: grid; } .status-card { min-width: auto; } }
+@media (max-width: 920px) { .hero, .grid { grid-template-columns: 1fr; display: grid; } .status-card { min-width: auto; } .history-row { grid-template-columns: 1fr; } }

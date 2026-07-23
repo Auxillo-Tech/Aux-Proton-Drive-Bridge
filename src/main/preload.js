@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('auxProtonBridge', {
   downloadAll: (options) => ipcRenderer.invoke('proton:downloadAll', options),
   downloadPaths: (options) => ipcRenderer.invoke('proton:downloadPaths', options),
   uploadPaths: (options) => ipcRenderer.invoke('proton:uploadPaths', options),
+  getOperationHistory: () => ipcRenderer.invoke('proton:getOperationHistory'),
+  clearOperationHistory: () => ipcRenderer.invoke('proton:clearOperationHistory'),
   onProgress: (callback) => {
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on('proton:progress', handler);

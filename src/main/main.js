@@ -2,10 +2,41 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { DEFAULT_LOCAL_FOLDER, getStatus, parseListOutput, runProton } = require('./protonCli');
+const { createOperationStore } = require('./operationStore');
 
 app.disableHardwareAcceleration();
 
 let mainWindow;
+let operationStore;
+
+function getOperationStore() {
+  if (!operationStore) operationStore = createOperationStore(path.join(app.getPath('userData'), 'operations.json'));
+  return operationStore;
+}
+
+function sendProgress(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:progress', payload);
+}
+
+async function recordOperation(action, options, runner) {
+  const store = getOperationStore();
+  const op = store.begin(action, options);
+  sendProgress({ operationId: op.id, stream: 'system', text: `${action} queued` });
+  const eventSink = (payload) => {
+    store.appendEvent(op.id, payload.stream, payload.text);
+    sendProgress({ operationId: op.id, ...payload });
+  };
+  try {
+    const result = await runner(eventSink, op);
+    store.finish(op.id, 'succeeded', result);
+    sendProgress({ operationId: op.id, stream: 'system', text: `${action} succeeded` });
+    return { ...result, operationId: op.id };
+  } catch (err) {
+    store.finish(op.id, 'failed', { code: err?.result?.code, stdout: err?.result?.stdout, stderr: err?.result?.stderr, error: err?.message || String(err) });
+    sendProgress({ operationId: op.id, stream: 'stderr', text: err?.message || String(err) });
+    throw err;
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -25,23 +56,19 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 }
 
-function sendProgress(payload) {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:progress', payload);
-}
-
 ipcMain.handle('proton:getDefaultLocalFolder', async () => DEFAULT_LOCAL_FOLDER);
 ipcMain.handle('proton:getStatus', async () => getStatus());
-ipcMain.handle('proton:listMyFiles', async () => {
-  const result = await runProton('list', { path: '/my-files' });
-  return { items: parseListOutput(result.stdout), raw: result.stdout };
-});
+ipcMain.handle('proton:listMyFiles', async () => recordOperation('list', { path: '/my-files' }, async (eventSink) => {
+  const result = await runProton('list', { path: '/my-files' }, eventSink);
+  return { ...result, items: parseListOutput(result.stdout), raw: result.stdout };
+}));
 ipcMain.handle('proton:login', async () => {
-  const result = await runProton('login', {}, sendProgress);
-  return { ok: true, stdout: result.stdout, stderr: result.stderr };
+  const result = await recordOperation('login', {}, (eventSink) => runProton('login', {}, eventSink));
+  return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
 });
 ipcMain.handle('proton:logout', async () => {
-  const result = await runProton('logout', {}, sendProgress);
-  return { ok: true, stdout: result.stdout, stderr: result.stderr };
+  const result = await recordOperation('logout', {}, (eventSink) => runProton('logout', {}, eventSink));
+  return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
 });
 ipcMain.handle('proton:chooseLocalFolder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'], defaultPath: DEFAULT_LOCAL_FOLDER });
@@ -63,19 +90,21 @@ ipcMain.handle('proton:downloadAll', async (_event, options = {}) => {
   const localFolder = options.localFolder || DEFAULT_LOCAL_FOLDER;
   fs.mkdirSync(localFolder, { recursive: true });
   const paths = Array.isArray(options.paths) && options.paths.length ? options.paths : ['/my-files'];
-  const result = await runProton('download', { ...options, paths, localFolder }, sendProgress);
-  return { ok: true, localFolder, stdout: result.stdout, stderr: result.stderr };
+  const result = await recordOperation('downloadAll', { ...options, paths, localFolder }, (eventSink) => runProton('download', { ...options, paths, localFolder }, eventSink));
+  return { ok: true, operationId: result.operationId, localFolder, stdout: result.stdout, stderr: result.stderr };
 });
 ipcMain.handle('proton:downloadPaths', async (_event, options = {}) => {
   const localFolder = options.localFolder || DEFAULT_LOCAL_FOLDER;
   fs.mkdirSync(localFolder, { recursive: true });
-  const result = await runProton('download', { ...options, localFolder }, sendProgress);
-  return { ok: true, localFolder, stdout: result.stdout, stderr: result.stderr };
+  const result = await recordOperation('downloadPaths', { ...options, localFolder }, (eventSink) => runProton('download', { ...options, localFolder }, eventSink));
+  return { ok: true, operationId: result.operationId, localFolder, stdout: result.stdout, stderr: result.stderr };
 });
 ipcMain.handle('proton:uploadPaths', async (_event, options = {}) => {
-  const result = await runProton('upload', options, sendProgress);
-  return { ok: true, stdout: result.stdout, stderr: result.stderr };
+  const result = await recordOperation('uploadPaths', options, (eventSink) => runProton('upload', options, eventSink));
+  return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
 });
+ipcMain.handle('proton:getOperationHistory', async () => getOperationStore().list(50));
+ipcMain.handle('proton:clearOperationHistory', async () => { getOperationStore().clear(); return []; });
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
