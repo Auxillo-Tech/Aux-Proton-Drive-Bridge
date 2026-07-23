@@ -5,6 +5,7 @@ Status: engineering MVP / private beta foundation.
 ## Current release candidate
 
 - Version: 0.1.0
+- GitHub release: <https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.1.0>
 - Generated release metadata: `dist/release-manifest.json`
 - Canonical checksums: `dist/SHA256SUMS.txt`
 
@@ -17,14 +18,15 @@ Do not copy mutable source-archive hashes into this file; this file is included 
 - Electron source smoke: `npm run smoke:source` — passed
 - Packaged AppImage smoke: `npm run smoke:appimage` — passed
 - Artifact checksums: `cd dist && sha256sum -c SHA256SUMS.txt` — passed
+- GitHub release manifest downloaded and verified — passed
 
 ## Release artifacts
 
-The local release set contains:
+The v0.1.0 release set contains:
 
-- `Aux Proton Bridge-0.1.0-x86_64.AppImage`
-- `Aux Proton Bridge-0.1.0-amd64.deb`
-- `Aux Proton Bridge-0.1.0-x86_64.rpm`
+- `Aux.Proton.Bridge-0.1.0-x86_64.AppImage`
+- `Aux.Proton.Bridge-0.1.0-amd64.deb`
+- `Aux.Proton.Bridge-0.1.0-x86_64.rpm`
 - `aux-proton-bridge-0.1.0-source.tar.gz`
 - `aux-proton-bridge-0.1.0-source.zip`
 - `SHA256SUMS.txt`
@@ -36,14 +38,14 @@ The local release set contains:
 - Deletes are not automated.
 - Conflict behavior is conservative: folder merge and file skip.
 - Linux packages are unsigned.
-- GitHub publication is blocked until GitHub auth/tooling is available on this machine.
 - Proton CLI behavior depends on Proton's upstream CLI/SDK.
+- Wider distro qualification beyond this Fedora 44 x64 build host is still pending.
 
 ## Required before public 1.0
 
-- GitHub repository and release assets published/verified
 - Signed or attested release path chosen
 - Persistent sync metadata database implemented
 - Conflict review UI implemented
 - Background tray/service mode implemented
-- Wider distro qualification beyond this Fedora 44 x64 build host
+- Wider distro qualification
+- Optional AUR packaging
