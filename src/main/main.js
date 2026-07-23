@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { DEFAULT_LOCAL_FOLDER, getStatus, parseListOutput, runProton } = require('./protonCli');
@@ -10,6 +10,9 @@ app.disableHardwareAcceleration();
 let mainWindow;
 let operationStore;
 let profileStore;
+let tray;
+let isQuitting = false;
+let schedulerTimer;
 
 function getOperationStore() {
   if (!operationStore) operationStore = createOperationStore(path.join(app.getPath('userData'), 'operations.json'));
@@ -45,6 +48,57 @@ async function recordOperation(action, options, runner) {
   }
 }
 
+function validateBackupProfile(profile) {
+  if (!profile.enabled) throw new Error('Backup profile is disabled. Enable and save it first.');
+  if (!profile.localPaths.length) throw new Error('Backup profile has no local paths. Add folders/files first.');
+}
+
+async function runDefaultBackupProfile() {
+  const profile = getProfileStore().getDefaultBackupProfile();
+  validateBackupProfile(profile);
+  const options = {
+    localPaths: profile.localPaths,
+    parentPath: profile.remoteParentPath || '/my-files',
+    fileConflictStrategy: profile.fileConflictStrategy || 'skip',
+    folderConflictStrategy: profile.folderConflictStrategy || 'merge',
+    deletePropagation: false
+  };
+  const result = await recordOperation('runBackupProfile', options, (eventSink) => runProton('upload', options, eventSink));
+  return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function createTray() {
+  if (tray) return tray;
+  const iconPath = path.join(__dirname, '..', '..', 'assets', 'icon.png');
+  const image = nativeImage.createFromPath(iconPath);
+  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image.resize({ width: 16, height: 16 }));
+  tray.setToolTip('Aux Proton Bridge');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show Aux Proton Bridge', click: showMainWindow },
+    { label: 'Run backup now', click: () => runDefaultBackupProfile().catch(err => sendProgress({ stream: 'stderr', text: err.message || String(err) })) },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { isQuitting = true; app.quit(); } }
+  ]));
+  tray.on('click', showMainWindow);
+  return tray;
+}
+
+function startScheduler() {
+  if (schedulerTimer) return;
+  schedulerTimer = setInterval(() => {
+    const profile = getProfileStore().getDefaultBackupProfile();
+    if (!profile.enabled || !profile.localPaths.length) return;
+    runDefaultBackupProfile().catch(err => sendProgress({ stream: 'stderr', text: err.message || String(err) }));
+  }, 30 * 60 * 1000);
+  schedulerTimer.unref?.();
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1120,
@@ -58,6 +112,12 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
+    }
+  });
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
     }
   });
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
@@ -119,21 +179,13 @@ ipcMain.handle('proton:getOperationHistory', async () => getOperationStore().lis
 ipcMain.handle('proton:clearOperationHistory', async () => { getOperationStore().clear(); return []; });
 ipcMain.handle('proton:getBackupProfile', async () => getProfileStore().getDefaultBackupProfile());
 ipcMain.handle('proton:saveBackupProfile', async (_event, profile = {}) => getProfileStore().saveDefaultBackupProfile(profile));
-ipcMain.handle('proton:runBackupProfile', async () => {
-  const profile = getProfileStore().getDefaultBackupProfile();
-  if (!profile.enabled) throw new Error('Backup profile is disabled. Enable and save it first.');
-  if (!profile.localPaths.length) throw new Error('Backup profile has no local paths. Add folders/files first.');
-  const options = {
-    localPaths: profile.localPaths,
-    parentPath: profile.remoteParentPath || '/my-files',
-    fileConflictStrategy: profile.fileConflictStrategy || 'skip',
-    folderConflictStrategy: profile.folderConflictStrategy || 'merge',
-    deletePropagation: false
-  };
-  const result = await recordOperation('runBackupProfile', options, (eventSink) => runProton('upload', options, eventSink));
-  return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
-});
+ipcMain.handle('proton:runBackupProfile', async () => runDefaultBackupProfile());
 
-app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
+  startScheduler();
+});
+app.on('before-quit', () => { isQuitting = true; });
+app.on('window-all-closed', () => { if (process.platform === 'darwin') return; });
+app.on('activate', () => { showMainWindow(); });
