@@ -1,0 +1,29 @@
+appId: tech.auxillo.protonbridge
+productName: Aux Proton Bridge
+artifactName: ${productName}-${version}-${arch}.${ext}
+directories:
+  output: dist
+  buildResources: assets
+files:
+  - src/**/*
+  - package.json
+  - README.md
+asar: true
+compression: normal
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  category: Network
+  executableName: aux-proton-bridge
+  icon: assets/icon.png
+deb:
+  depends:
+    - libsecret-1-0
+    - xdg-utils
+rpm:
+  depends:
+    - libsecret
+    - xdg-utils
+publish: null

@@ -1,11 +1,24 @@
 const http = require('node:http');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const fs = require('node:fs');
 const childProcess = require('node:child_process');
 
 const root = path.join(__dirname, '..');
-const env = { ...process.env, ELECTRON_ENABLE_LOGGING: '1' };
-const child = spawn(path.join(root, 'node_modules', '.bin', 'electron'), ['.', '--remote-debugging-port=9339', '--remote-allow-origins=http://127.0.0.1:9339'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+const dist = path.join(root, 'dist');
+const appImage = fs.readdirSync(dist).find(name => name.endsWith('.AppImage'));
+if (!appImage) throw new Error('No AppImage found in dist/');
+const appPath = path.join(dist, appImage);
+fs.chmodSync(appPath, 0o755);
+const env = {
+  ...process.env,
+  APPIMAGE_EXTRACT_AND_RUN: '1',
+  ELECTRON_ENABLE_LOGGING: '1',
+  XDG_CONFIG_HOME: path.join(root, '.cache', 'smoke-config'),
+  XDG_CACHE_HOME: path.join(root, '.cache', 'smoke-cache'),
+  XDG_DATA_HOME: path.join(root, '.cache', 'smoke-data')
+};
+const child = spawn(appPath, ['--remote-debugging-port=9340', '--remote-allow-origins=http://127.0.0.1:9340'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let output = '';
 child.stdout.on('data', d => output += d);
 child.stderr.on('data', d => output += d);
@@ -24,7 +37,7 @@ function killTree(pid, signal) {
 
 function getJson(pathname) {
   return new Promise((resolve, reject) => {
-    http.get({ host: '127.0.0.1', port: 9339, path: pathname }, res => {
+    http.get({ host: '127.0.0.1', port: 9340, path: pathname }, res => {
       let data = '';
       res.on('data', d => data += d);
       res.on('end', () => resolve(JSON.parse(data)));
@@ -34,7 +47,7 @@ function getJson(pathname) {
 (async () => {
   try {
     let page = null;
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 100; i++) {
       try {
         const pages = await getJson('/json');
         page = pages.find(p => p.type === 'page' && String(p.title).includes('Aux Proton Bridge')) || pages.find(p => p.type === 'page') || pages[0] || null;
@@ -42,15 +55,15 @@ function getJson(pathname) {
       } catch {}
       await new Promise(r => setTimeout(r, 250));
     }
-    if (!page) throw new Error('CDP page did not appear: ' + output.slice(-1000));
-    if (!String(page.title).includes('Aux Proton Bridge')) throw new Error(`Unexpected title: ${page.title}; url=${page.url}; logs=${output.slice(-1000)}`);
-    console.log('source smoke passed:', page.title);
+    if (!page) throw new Error('CDP page did not appear: ' + output.slice(-2000));
+    if (!String(page.title).includes('Aux Proton Bridge')) throw new Error(`Unexpected title: ${page.title}; logs=${output.slice(-2000)}`);
+    console.log('packaged AppImage smoke passed:', appImage, page.title);
   } finally {
     killTree(child.pid, 'SIGTERM');
-    const killer = setTimeout(() => killTree(child.pid, 'SIGKILL'), 1000);
+    const killer = setTimeout(() => killTree(child.pid, 'SIGKILL'), 1200);
     await Promise.race([
       new Promise(resolve => child.once('close', resolve)),
-      new Promise(resolve => setTimeout(resolve, 2200))
+      new Promise(resolve => setTimeout(resolve, 2500))
     ]);
     clearTimeout(killer);
   }
