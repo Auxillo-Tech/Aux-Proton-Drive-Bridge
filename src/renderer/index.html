@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aux Proton Bridge</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Auxillo Labs</p>
+        <h1>Aux Proton Bridge</h1>
+        <p class="subtitle">Unofficial Linux desktop bridge powered by Proton's official Drive CLI.</p>
+      </div>
+      <div class="status-card">
+        <span id="statusDot" class="dot"></span>
+        <div>
+          <strong id="statusText">Checking CLI…</strong>
+          <small id="versionText">Waiting for status</small>
+        </div>
+      </div>
+    </header>
+
+    <section class="toolbar">
+      <button id="refreshBtn">Refresh files</button>
+      <button id="loginBtn">Sign in</button>
+      <button id="logoutBtn" class="secondary">Log out</button>
+      <button id="openFolderBtn" class="secondary">Open local folder</button>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Remote `/my-files`</h2>
+            <p>Select folders/files to download.</p>
+          </div>
+          <button id="downloadSelectedBtn">Download selected</button>
+        </div>
+        <div id="fileList" class="file-list empty">No files loaded yet.</div>
+      </article>
+
+      <aside class="panel side">
+        <h2>Transfer controls</h2>
+        <label>Local folder
+          <div class="path-row">
+            <input id="localFolderInput" value="" />
+            <button id="chooseFolderBtn" class="secondary">Choose</button>
+          </div>
+        </label>
+        <button id="downloadAllBtn" class="wide">Download everything</button>
+        <button id="uploadBtn" class="wide secondary">Upload files/folders</button>
+        <div class="note">
+          <strong>Safe defaults:</strong> downloads merge folders and skip existing files. Proton credentials stay in the Proton CLI/OS secret store.
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel log-panel">
+      <div class="panel-head">
+        <h2>Activity log</h2>
+        <button id="clearLogBtn" class="secondary">Clear</button>
+      </div>
+      <pre id="logOutput"></pre>
+    </section>
+  </main>
+  <script src="./renderer.js"></script>
+</body>
+</html>
