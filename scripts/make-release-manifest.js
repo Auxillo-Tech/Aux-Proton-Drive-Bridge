@@ -6,7 +6,7 @@ const childProcess = require('node:child_process');
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
 const version = require(path.join(root, 'package.json')).version;
-const productPattern = new RegExp(`^(Aux Proton Drive Bridge-${version}-.+\\\\.(AppImage|deb|rpm)|aux-proton-drive-bridge-${version}-source\\\\.(tar\\\\.gz|zip))$`);
+const productPattern = new RegExp(`^(Aux Proton Drive Bridge-${version}-.+\\.(AppImage|deb|rpm)|aux-proton-drive-bridge-${version}-source\\.(tar\\.gz|zip))$`);
 const files = fs.existsSync(dist) ? fs.readdirSync(dist).filter(name => productPattern.test(name)).sort() : [];
 const artifacts = files.map(name => {
   const p = path.join(dist, name);
