@@ -35,6 +35,30 @@ function createAutoUpdater(options = {}) {
 
   let updateCheckTimer = null;
   let availableUpdate = null;
+  let cachedToken = null;
+
+  // Try to get a GitHub token for private repo access
+  function getGitHubToken() {
+    if (cachedToken) return cachedToken;
+    try {
+      const { execFileSync } = require('node:child_process');
+      const token = execFileSync('gh', ['auth', 'token'], { encoding: 'utf8', timeout: 3000 }).trim();
+      if (token) { cachedToken = token; return token; }
+    } catch {}
+    if (process.env.GH_TOKEN) { cachedToken = process.env.GH_TOKEN; return cachedToken; }
+    if (process.env.GITHUB_TOKEN) { cachedToken = process.env.GITHUB_TOKEN; return cachedToken; }
+    return null;
+  }
+
+  function buildHeaders() {
+    const headers = {
+      'User-Agent': userAgent,
+      Accept: 'application/vnd.github.v3+json'
+    };
+    const token = getGitHubToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  }
 
   // ── Version comparison ─────────────────────────────────────
 
@@ -55,7 +79,7 @@ function createAutoUpdater(options = {}) {
 
   function httpsGet(url) {
     return new Promise((resolve, reject) => {
-      https.get(url, { headers: { 'User-Agent': userAgent, Accept: 'application/vnd.github.v3+json' } }, (res) => {
+      https.get(url, { headers: buildHeaders() }, (res) => {
         let data = '';
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
@@ -78,7 +102,7 @@ function createAutoUpdater(options = {}) {
   function downloadFile(url, destPath) {
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(destPath);
-      https.get(url, { headers: { 'User-Agent': userAgent } }, (res) => {
+      https.get(url, { headers: buildHeaders() }, (res) => {
         if (res.statusCode >= 400) {
           reject(new Error(`Download failed: ${res.statusCode}`));
           return;
