@@ -10,10 +10,10 @@ button.secondary:hover { background: #263047; }
 button.wide { width: 100%; margin-top: 12px; }
 input { width: 100%; background: #0d111b; border: 1px solid #303a52; border-radius: 10px; padding: 10px; color: #edf2ff; }
 .shell { width: min(1400px, calc(100vw - 40px)); margin: 0 auto; padding: 32px 0 48px; }
-.hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 16px; }
-.hero-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
-.brand-logo { height: 58px; width: auto; display: block; }
-.status-card { min-width: 260px; padding: 16px 20px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.hero { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+.hero-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.brand-logo { height: 48px; width: auto; display: block; }
+.status-card { padding: 0; display: flex; align-items: center; gap: 12px; background: none; border: none; box-shadow: none; backdrop-filter: none; }
 .hero-text { display: flex; flex-direction: column; gap: 0px; }
 h1 { margin: 0; font-size: clamp(28px, 3vw, 42px); font-weight: 700; letter-spacing: -.02em; line-height: 1.15; }
 h2 { margin: 0 0 6px; font-size: 18px; }
