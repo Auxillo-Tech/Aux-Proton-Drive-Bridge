@@ -181,12 +181,16 @@ All items from the v0.2.x roadmap are now implemented:
 - Signing/attestation scripts
 - File manager integration
 - Optional FUSE mount
+- Desktop notifications
+- Selective sync profiles
+- Conflict review UI with metadata diff viewer
+- Multi-account profile support
 
 ### Future
 
-- AUR packaging
-- Flatpak packaging
-- Selective sync profiles
-- Conflict review UI with diff viewer
-- Desktop notifications
-- Multi-account support
+- AUR packaging — PKGBUILD available in `dist/aur/`
+- Flatpak packaging — manifest available in `dist/flatpak/`
+- Wider distro qualification
+- Desktop notifications for all events
+- Advanced conflict diff viewer with content comparison
+- Multi-account simultaneous sync

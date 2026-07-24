@@ -102,6 +102,14 @@ pre { margin: 0; min-height: 140px; max-height: 280px; overflow: auto; white-spa
 .conflict-actions button { font-size: 12px; padding: 7px 12px; white-space: nowrap; }
 .conflict-legend { margin-top: 16px; color: #9ba8c7; font-size: 13px; line-height: 1.6; padding: 14px; background: rgba(13,17,27,.6); border-radius: 12px; }
 .conflict-legend code { background: #1d2433; padding: 2px 6px; border-radius: 4px; }
+.conflict-diff { margin-top: 8px; }
+.conflict-diff summary { cursor: pointer; color: #45d2ff; font-size: 12px; }
+.diff-container { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.diff-side { padding: 8px; border-radius: 8px; font-size: 12px; line-height: 1.6; }
+.diff-side.local { background: rgba(69,210,255,.06); border: 1px solid rgba(69,210,255,.15); }
+.diff-side.remote { background: rgba(124,92,255,.06); border: 1px solid rgba(124,92,255,.15); }
+.diff-header { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; color: #9ba8c7; }
+.diff-item { font-size: 12px; color: #d7def5; }
 
 /* Queue */
 .queue-controls { display: flex; gap: 10px; }

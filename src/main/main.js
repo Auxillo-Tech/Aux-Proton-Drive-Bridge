@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, Notification } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -87,9 +87,15 @@ function getSyncEngine() {
     });
     syncEngine.on('sync_complete', (payload) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:syncComplete', payload);
+      try {
+        if (payload.queued > 0) new Notification({ title: 'Sync complete', body: `${payload.queued} file(s) synced` }).show();
+      } catch {}
     });
     syncEngine.on('error', (payload) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:syncError', payload);
+      try {
+        if (payload.message && !payload.message.includes('Skipping')) new Notification({ title: 'Sync error', body: payload.message }).show();
+      } catch {}
     });
   }
   return syncEngine;
@@ -278,6 +284,14 @@ ipcMain.handle('proton:clearOperationHistory', async () => { getOperationStore()
 ipcMain.handle('proton:getBackupProfile', async () => getProfileStore().getDefaultBackupProfile());
 ipcMain.handle('proton:saveBackupProfile', async (_event, profile = {}) => getProfileStore().saveDefaultBackupProfile(profile));
 ipcMain.handle('proton:runBackupProfile', async () => runDefaultBackupProfile());
+
+// ── IPC Handlers: Multi-profile ─────────────────────────────
+
+ipcMain.handle('profile:list', async () => getProfileStore().listProfiles());
+ipcMain.handle('profile:get', async (_event, id) => getProfileStore().getProfile(id));
+ipcMain.handle('profile:save', async (_event, profile) => getProfileStore().saveProfile(profile));
+ipcMain.handle('profile:delete', async (_event, id) => getProfileStore().deleteProfile(id));
+ipcMain.handle('profile:getActive', async () => getProfileStore().getActiveProfiles());
 
 // ── IPC Handlers: Sync Database ─────────────────────────────
 
