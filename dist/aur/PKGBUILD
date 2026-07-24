@@ -1,0 +1,52 @@
+# Maintainer: Auxillo <support@auxillo.tech>
+# Contributor: Auxillo
+
+pkgname=aux-proton-drive-bridge-bin
+pkgver=0.3.0
+pkgrel=1
+pkgdesc="Unofficial Linux desktop bridge for Proton Drive using the official Proton Drive CLI"
+arch=('x86_64')
+url="https://github.com/Auxillo-Tech/Aux-proton-drive-bridge"
+license=('MIT')
+depends=(
+  'electron'
+  'libsecret'
+  'xdg-utils'
+  'proton-drive'
+)
+makedepends=()
+provides=("${pkgname}")
+conflicts=("${pkgname}")
+source=(
+  "Aux.Proton.Drive.Bridge-${pkgver}-x86_64.AppImage::https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/download/v${pkgver}/Aux.Proton.Drive.Bridge-${pkgver}-x86_64.AppImage"
+  "aux-proton-drive-bridge-${pkgver}-source.tar.gz::https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/download/v${pkgver}/aux-proton-drive-bridge-${pkgver}-source.tar.gz"
+)
+sha256sums=('SKIP'
+            'SKIP')
+validpgpkeys=()
+
+package() {
+  install -dm755 "${pkgdir}/opt/Aux Proton Drive Bridge"
+  install -dm755 "${pkgdir}/usr/bin"
+  install -dm755 "${pkgdir}/usr/share/applications"
+  install -dm755 "${pkgdir}/usr/share/icons/hicolor/256x256/apps"
+
+  # Extract AppImage
+  cd "${srcdir}"
+  "${srcdir}/Aux.Proton.Drive.Bridge-${pkgver}-x86_64.AppImage" --appimage-extract > /dev/null 2>&1
+
+  # Copy app files
+  cp -r "${srcdir}/squashfs-root/opt/Aux Proton Drive Bridge/"* "${pkgdir}/opt/Aux Proton Drive Bridge/"
+
+  # Desktop entry
+  install -Dm644 "${srcdir}/squashfs-root/usr/share/applications/"*.desktop -t "${pkgdir}/usr/share/applications/"
+
+  # Icons
+  find "${srcdir}/squashfs-root/usr/share/icons" -name "*.png" -exec cp {} "${pkgdir}/usr/share/icons/hicolor/256x256/apps/" \;
+
+  # Symlink
+  install -Dm755 "${pkgdir}/opt/Aux Proton Drive Bridge/aux-proton-drive-bridge" "${pkgdir}/usr/bin/aux-proton-drive-bridge"
+
+  # Cleanup
+  rm -rf "${srcdir}/squashfs-root"
+}
