@@ -7,7 +7,7 @@ const childProcess = require('node:child_process');
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
 const version = require(path.join(root, 'package.json')).version;
-const appImage = fs.readdirSync(dist).find(name => name === `Aux Proton Bridge-${version}-x86_64.AppImage`);
+const appImage = fs.readdirSync(dist).find(name => name === `Aux Proton Drive Bridge-${version}-x86_64.AppImage`);
 if (!appImage) throw new Error(`No AppImage for version ${version} found in dist/`);
 const appPath = path.join(dist, appImage);
 fs.chmodSync(appPath, 0o755);
@@ -51,13 +51,13 @@ function getJson(pathname) {
     for (let i = 0; i < 100; i++) {
       try {
         const pages = await getJson('/json');
-        page = pages.find(p => p.type === 'page' && String(p.title).includes('Aux Proton Bridge')) || pages.find(p => p.type === 'page') || pages[0] || null;
-        if (page && String(page.title).includes('Aux Proton Bridge')) break;
+        page = pages.find(p => p.type === 'page' && String(p.title).includes('Aux Proton Drive Bridge')) || pages.find(p => p.type === 'page') || pages[0] || null;
+        if (page && String(page.title).includes('Aux Proton Drive Bridge')) break;
       } catch {}
       await new Promise(r => setTimeout(r, 250));
     }
     if (!page) throw new Error('CDP page did not appear: ' + output.slice(-2000));
-    if (!String(page.title).includes('Aux Proton Bridge')) throw new Error(`Unexpected title: ${page.title}; logs=${output.slice(-2000)}`);
+    if (!String(page.title).includes('Aux Proton Drive Bridge')) throw new Error(`Unexpected title: ${page.title}; logs=${output.slice(-2000)}`);
     console.log('packaged AppImage smoke passed:', appImage, page.title);
   } finally {
     killTree(child.pid, 'SIGTERM');

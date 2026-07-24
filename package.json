@@ -1,9 +1,9 @@
 {
-  "name": "aux-proton-bridge",
-  "version": "0.2.1",
+  "name": "aux-proton-drive-bridge",
+  "version": "0.3.0",
   "description": "Unofficial Linux desktop bridge for Proton Drive using the official Proton Drive CLI.",
   "homepage": "https://github.com/Auxillo-Tech/Aux-proton-drive-bridge",
-  "desktopName": "aux-proton-bridge.desktop",
+  "desktopName": "aux-proton-drive-bridge.desktop",
   "main": "src/main/main.js",
   "license": "MIT",
   "author": {
@@ -20,10 +20,18 @@
     "smoke:appimage": "node scripts/smoke-appimage.js",
     "dist:x64": "bash scripts/dist-x64.sh",
     "release:manifest": "node scripts/make-release-manifest.js",
-    "release:source": "node scripts/make-source-archives.js"
+    "release:source": "node scripts/make-source-archives.js",
+    "release:sign": "bash scripts/sign-release.sh",
+    "release:sign:verify": "bash scripts/sign-release.sh --verify",
+    "release:all": "npm run check && npm run dist:x64 && npm run release:source && npm run release:manifest && npm run release:sign",
+    "integration:file-manager": "bash scripts/install-file-manager-integration.sh",
+    "sync:devices": "bash scripts/install-sync-devices.sh"
   },
   "devDependencies": {
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.1"
   }
 }

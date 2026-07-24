@@ -1,6 +1,6 @@
-# Install Aux Proton Bridge
+# Install Aux Proton Drive Bridge
 
-Aux Proton Bridge is distributed as Linux release artifacts from GitHub Releases.
+Aux Proton Drive Bridge is distributed as Linux release artifacts from GitHub Releases.
 
 Release page:
 
@@ -53,11 +53,11 @@ sha256sum -c SHA256SUMS.txt
 Expected v0.2.1 assets:
 
 ```text
-Aux.Proton.Bridge-0.2.1-x86_64.AppImage
-Aux.Proton.Bridge-0.2.1-amd64.deb
-Aux.Proton.Bridge-0.2.1-x86_64.rpm
-aux-proton-bridge-0.2.1-source.tar.gz
-aux-proton-bridge-0.2.1-source.zip
+Aux.Proton.Drive.Bridge-0.2.1-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.2.1-amd64.deb
+Aux.Proton.Drive.Bridge-0.2.1-x86_64.rpm
+aux-proton-drive-bridge-0.2.1-source.tar.gz
+aux-proton-drive-bridge-0.2.1-source.zip
 SHA256SUMS.txt
 release-manifest.json
 ```
@@ -67,32 +67,32 @@ release-manifest.json
 Download:
 
 ```text
-Aux.Proton.Bridge-0.2.1-amd64.deb
+Aux.Proton.Drive.Bridge-0.2.1-amd64.deb
 ```
 
 Option A — graphical install:
 
 1. Double-click the `.deb` file.
 2. Install with the distro's Software app/package installer.
-3. Launch **Aux Proton Bridge** from the application menu.
+3. Launch **Aux Proton Drive Bridge** from the application menu.
 
 Option B — terminal install:
 
 ```bash
-sudo apt install ./Aux.Proton.Bridge-0.2.1-amd64.deb
+sudo apt install ./Aux.Proton.Drive.Bridge-0.2.1-amd64.deb
 ```
 
 If using `dpkg` directly:
 
 ```bash
-sudo dpkg -i ./Aux.Proton.Bridge-0.2.1-amd64.deb
+sudo dpkg -i ./Aux.Proton.Drive.Bridge-0.2.1-amd64.deb
 sudo apt -f install
 ```
 
 Uninstall:
 
 ```bash
-sudo apt remove aux-proton-bridge
+sudo apt remove aux-proton-drive-bridge
 ```
 
 ## Install on Fedora
@@ -100,21 +100,21 @@ sudo apt remove aux-proton-bridge
 Download:
 
 ```text
-Aux.Proton.Bridge-0.2.1-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.2.1-x86_64.rpm
 ```
 
 Install:
 
 ```bash
-sudo dnf install ./Aux.Proton.Bridge-0.2.1-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-0.2.1-x86_64.rpm
 ```
 
-Launch **Aux Proton Bridge** from the application menu.
+Launch **Aux Proton Drive Bridge** from the application menu.
 
 Uninstall:
 
 ```bash
-sudo dnf remove aux-proton-bridge
+sudo dnf remove aux-proton-drive-bridge
 ```
 
 ## Install on RHEL / Rocky / Alma
@@ -124,13 +124,13 @@ Download the `.rpm` asset.
 Install:
 
 ```bash
-sudo dnf install ./Aux.Proton.Bridge-0.2.1-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-0.2.1-x86_64.rpm
 ```
 
 or on older systems:
 
 ```bash
-sudo yum install ./Aux.Proton.Bridge-0.2.1-x86_64.rpm
+sudo yum install ./Aux.Proton.Drive.Bridge-0.2.1-x86_64.rpm
 ```
 
 ## Install on openSUSE
@@ -140,7 +140,7 @@ Download the `.rpm` asset.
 Install:
 
 ```bash
-sudo zypper install ./Aux.Proton.Bridge-0.2.1-x86_64.rpm
+sudo zypper install ./Aux.Proton.Drive.Bridge-0.2.1-x86_64.rpm
 ```
 
 ## Install on Arch / Manjaro / EndeavourOS
@@ -150,19 +150,19 @@ Use the AppImage for v0.2.1.
 Download:
 
 ```text
-Aux.Proton.Bridge-0.2.1-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.2.1-x86_64.AppImage
 ```
 
 Make it executable:
 
 ```bash
-chmod +x ./Aux.Proton.Bridge-0.2.1-x86_64.AppImage
+chmod +x ./Aux.Proton.Drive.Bridge-0.2.1-x86_64.AppImage
 ```
 
 Run:
 
 ```bash
-./Aux.Proton.Bridge-0.2.1-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-0.2.1-x86_64.AppImage
 ```
 
 Future work: AUR package.
@@ -172,8 +172,8 @@ Future work: AUR package.
 Use the AppImage.
 
 ```bash
-chmod +x ./Aux.Proton.Bridge-0.2.1-x86_64.AppImage
-./Aux.Proton.Bridge-0.2.1-x86_64.AppImage
+chmod +x ./Aux.Proton.Drive.Bridge-0.2.1-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-0.2.1-x86_64.AppImage
 ```
 
 If AppImage does not launch because FUSE is missing, see [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
@@ -216,7 +216,7 @@ dist/
 
 ## First run after install
 
-1. Launch **Aux Proton Bridge**.
+1. Launch **Aux Proton Drive Bridge**.
 2. Click **Sign in**.
 3. Complete Proton login in your browser.
 4. Return to the app.

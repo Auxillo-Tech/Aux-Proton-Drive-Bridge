@@ -1,13 +1,12 @@
-const api = window.auxProtonBridge;
-const state = { items: [], selected: new Set(), localFolder: '', backupProfile: null };
+const api = window.auxProtonDriveBridge;
+const state = { items: [], selected: new Set(), localFolder: '', backupProfile: null, syncDbStats: null };
 
 const $ = (id) => document.getElementById(id);
 const logOutput = $('logOutput');
 
 function log(message, kind = 'info') {
   const ts = new Date().toLocaleTimeString();
-  logOutput.textContent += `[${ts}] ${kind.toUpperCase()} ${message}
-`;
+  logOutput.textContent += `[${ts}] ${kind.toUpperCase()} ${message}\n`;
   logOutput.scrollTop = logOutput.scrollHeight;
 }
 
@@ -20,6 +19,30 @@ function setStatus(status) {
   $('statusText').textContent = status.busy ? 'Proton CLI busy' : status.installed ? (status.authenticated ? 'Ready' : 'Login needed') : 'CLI missing';
   $('versionText').textContent = status.version || status.error || 'No version available';
 }
+
+// ── Tab switching ───────────────────────────────────────────
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const tabBtn = $(`tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+  if (tabBtn) tabBtn.classList.add('active');
+  const panel = $(`panel${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+  if (panel) panel.classList.add('active');
+  // Refresh data on tab switch
+  if (tabName === 'sync') refreshSyncDashboard();
+  if (tabName === 'conflicts') refreshConflicts();
+  if (tabName === 'queue') refreshQueue();
+  if (tabName === 'fuse') refreshFuse();
+}
+
+// Tab click handlers
+['Files', 'Sync', 'Conflicts', 'Queue', 'Fuse', 'Updates'].forEach(name => {
+  const btn = $(`tab${name}`);
+  if (btn) btn.addEventListener('click', () => switchTab(name.toLowerCase()));
+});
+
+// ── Original file listing ───────────────────────────────────
 
 function renderFiles() {
   const list = $('fileList');
@@ -137,7 +160,7 @@ async function refreshFiles() {
 }
 
 function remotePathForName(name) {
-  return `/my-files/${String(name).replaceAll('/', '\/')}`;
+  return `/my-files/${String(name).replaceAll('/', '\\/')}`;
 }
 
 async function run(label, fn) {
@@ -155,7 +178,392 @@ async function run(label, fn) {
   }
 }
 
+// ── Sync Dashboard ──────────────────────────────────────────
+
+let syncStarted = false;
+
+async function refreshSyncDashboard() {
+  try {
+    const stats = await api.sync.getStats();
+    state.syncDbStats = stats;
+    $('syncSynced').textContent = stats.byState?.synced || '0';
+    const pending = (stats.byState?.pending_download || 0) + (stats.byState?.pending_upload || 0) +
+                    (stats.byState?.local_new || 0) + (stats.byState?.remote_new || 0) +
+                    (stats.byState?.local_modified || 0) + (stats.byState?.remote_modified || 0);
+    $('syncPending').textContent = pending;
+    $('syncConflicts').textContent = stats.byState?.conflict || '0';
+    $('syncTotal').textContent = stats.fileCount || '0';
+    $('syncEvents').textContent = stats.eventCount || '0';
+    $('syncDbSize').textContent = stats.dbSize ? `${(stats.dbSize / 1024).toFixed(0)} KB` : '—';
+
+    // Update conflict badge in tab
+    const conflictCount = stats.byState?.conflict || 0;
+    const badge = $('conflictBadge');
+    if (conflictCount > 0) {
+      badge.textContent = conflictCount;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+
+    // Sync engine state
+    const engineState = await api.syncEngine.getState();
+    if (engineState) {
+      $('syncIcon').textContent = engineState.isRunning ? '🔄' : (syncStarted ? '▶' : '⏸');
+      $('syncStatusText').textContent = engineState.isRunning ? 'Syncing…' : syncStarted ? 'Active' : 'Idle';
+    }
+
+    // Pending items list
+    const pendingItems = await api.sync.listFilesNeedingSync();
+    const pendingList = $('syncPendingList');
+    if (!pendingItems || !pendingItems.length) {
+      pendingList.className = 'file-list empty';
+      pendingList.textContent = 'No items pending sync.';
+    } else {
+      pendingList.className = 'file-list';
+      pendingList.innerHTML = '';
+      for (const item of pendingItems) {
+        const row = document.createElement('div');
+        row.className = 'file-row';
+        row.style.gridTemplateColumns = '1fr auto';
+        const name = document.createElement('span');
+        name.textContent = item.remote_path;
+        const state = document.createElement('span');
+        state.className = `badge ${item.sync_state}`;
+        state.textContent = item.sync_state;
+        row.append(name, state);
+        pendingList.append(row);
+      }
+    }
+  } catch (err) {
+    log(`Sync dashboard error: ${err.message}`, 'error');
+  }
+}
+
+$('syncStartBtn').addEventListener('click', async () => {
+  const mode = $('syncModeSelect').value;
+  const interval = parseInt($('pollIntervalSelect').value, 10);
+  try {
+    await api.syncEngine.start(mode, null, interval);
+    syncStarted = true;
+    log(`Sync started: mode=${mode}, interval=${interval}ms`);
+    refreshSyncDashboard();
+  } catch (err) { log(`Sync start error: ${err.message}`, 'error'); }
+});
+
+$('syncStopBtn').addEventListener('click', async () => {
+  try {
+    await api.syncEngine.stop();
+    syncStarted = false;
+    log('Sync stopped');
+    refreshSyncDashboard();
+  } catch (err) { log(`Sync stop error: ${err.message}`, 'error'); }
+});
+
+$('syncScanNowBtn').addEventListener('click', async () => {
+  log('Running sync scan…');
+  try {
+    const result = await api.syncEngine.scanNow();
+    log(`Sync scan complete: ${result.queued || 0} queued, ${result.remaining || 0} remaining`);
+    refreshSyncDashboard();
+  } catch (err) { log(`Sync scan error: ${err.message}`, 'error'); }
+});
+
+$('syncRefreshBtn').addEventListener('click', refreshSyncDashboard);
+
+// ── Conflicts ───────────────────────────────────────────────
+
+async function refreshConflicts() {
+  try {
+    const conflicts = await api.conflict.listActive();
+    const stats = await api.conflict.getStats();
+    const container = $('conflictList');
+
+    $('conflictStats').textContent = stats ? `${stats.open} open, ${stats.resolved} resolved` : '';
+
+    if (!conflicts || !conflicts.length) {
+      container.className = 'file-list empty';
+      container.textContent = 'No conflicts detected.';
+      return;
+    }
+
+    container.className = 'file-list';
+    container.innerHTML = '';
+    for (const conflict of conflicts) {
+      const row = document.createElement('div');
+      row.className = 'conflict-row';
+      const info = document.createElement('div');
+      info.innerHTML = `
+        <div class="conflict-type">${conflict.type}</div>
+        <div class="conflict-path">${conflict.remotePath}</div>
+        <div class="conflict-reason">${conflict.reason}</div>
+      `;
+      const actions = document.createElement('div');
+      actions.className = 'conflict-actions';
+      ['keep_local', 'keep_remote', 'keep_both', 'skip'].forEach(strategy => {
+        const btn = document.createElement('button');
+        btn.className = 'secondary';
+        btn.textContent = strategy.replace('_', ' ');
+        btn.addEventListener('click', async () => {
+          try {
+            const result = await api.conflict.resolve(conflict.id, strategy);
+            log(`Resolved conflict ${conflict.id}: ${strategy}`);
+            refreshConflicts();
+            refreshSyncDashboard();
+          } catch (err) { log(`Conflict resolution error: ${err.message}`, 'error'); }
+        });
+        actions.append(btn);
+      });
+      row.append(info, actions);
+      container.append(row);
+    }
+  } catch (err) {
+    log(`Conflicts error: ${err.message}`, 'error');
+  }
+}
+
+$('conflictRefreshBtn').addEventListener('click', refreshConflicts);
+
+// ── Transfer Queue ──────────────────────────────────────────
+
+async function refreshQueue() {
+  try {
+    const queueState = await api.transfer.getState();
+    if (!queueState) return;
+
+    // Active
+    const activeContainer = $('queueActive');
+    if (!queueState.active || !queueState.active.length) {
+      activeContainer.className = 'file-list empty';
+      activeContainer.textContent = 'No active transfers.';
+    } else {
+      activeContainer.className = 'file-list';
+      activeContainer.innerHTML = '';
+      for (const a of queueState.active) {
+        const row = document.createElement('div');
+        row.className = 'queue-row';
+        row.innerHTML = `<span class="badge running">${a.action}</span><span>${a.id}</span><button class="secondary" onclick="cancelTransfer('${a.id}')">Cancel</button>`;
+        activeContainer.append(row);
+      }
+    }
+
+    // Pending
+    const pendingContainer = $('queuePending');
+    if (!queueState.pending || !queueState.pending.length) {
+      pendingContainer.className = 'file-list empty';
+      pendingContainer.textContent = 'No pending transfers.';
+    } else {
+      pendingContainer.className = 'file-list';
+      pendingContainer.innerHTML = '';
+      for (const p of queueState.pending) {
+        const row = document.createElement('div');
+        row.className = 'queue-row';
+        row.innerHTML = `<span class="badge pending">${p.action}</span><span>${p.priority}</span><button class="secondary" onclick="cancelTransfer('${p.id}')">Cancel</button>`;
+        pendingContainer.append(row);
+      }
+    }
+
+    // Completed
+    const completedContainer = $('queueCompleted');
+    if (!queueState.recentCompleted || !queueState.recentCompleted.length) {
+      completedContainer.className = 'file-list empty';
+      completedContainer.textContent = 'No completed transfers yet.';
+    } else {
+      completedContainer.className = 'file-list';
+      completedContainer.innerHTML = '';
+      for (const c of queueState.recentCompleted) {
+        const row = document.createElement('div');
+        row.className = 'queue-row';
+        const statusClass = c.status === 'succeeded' ? 'succeeded' : 'failed';
+        row.innerHTML = `<span class="badge ${statusClass}">${c.action}</span><span>${c.status}</span><small>${formatWhen(c.completedAt)}</small>`;
+        completedContainer.append(row);
+      }
+    }
+  } catch (err) {
+    log(`Queue refresh error: ${err.message}`, 'error');
+  }
+}
+
+window.cancelTransfer = async (id) => {
+  try { await api.transfer.cancel(id); refreshQueue(); }
+  catch (err) { log(`Cancel error: ${err.message}`, 'error'); }
+};
+
+$('queuePauseBtn').addEventListener('click', async () => {
+  try { await api.transfer.pause(); log('Queue paused'); refreshQueue(); }
+  catch (err) { log(`Pause error: ${err.message}`, 'error'); }
+});
+
+$('queueResumeBtn').addEventListener('click', async () => {
+  try { await api.transfer.resume(); log('Queue resumed'); refreshQueue(); }
+  catch (err) { log(`Resume error: ${err.message}`, 'error'); }
+});
+
+$('queueCancelAllBtn').addEventListener('click', async () => {
+  try {
+    const result = await api.transfer.cancelAll();
+    log(`Cancelled ${result.cancelledActive} active, ${result.cancelledPending} pending`);
+    refreshQueue();
+  } catch (err) { log(`Cancel all error: ${err.message}`, 'error'); }
+});
+
+// ── FUSE Mount ──────────────────────────────────────────────
+
+async function refreshFuse() {
+  try {
+    const status = await api.fuse.getStatus();
+    if (!status) return;
+
+    const dot = $('fuseStateDot');
+    dot.className = 'dot';
+    if (status.isMounted) { dot.classList.add('ok');
+      $('fuseStateText').textContent = `Mounted at ${status.mountPoint}`; }
+    else if (status.state === 'error') { dot.classList.add('bad');
+      $('fuseStateText').textContent = 'Error'; }
+    else if (status.state === 'mounting') { dot.classList.add('warn');
+      $('fuseStateText').textContent = 'Mounting…'; }
+    else { dot.classList.add('bad');
+      $('fuseStateText').textContent = 'Not mounted'; }
+
+    $('fuseMountPoint').textContent = status.mountPoint || '~/ProtonDrive-FUSE';
+
+    const errorEl = $('fuseError');
+    if (status.error) {
+      errorEl.textContent = `Error: ${status.error}`;
+      errorEl.classList.remove('hidden');
+    } else {
+      errorEl.classList.add('hidden');
+    }
+
+    $('fuseMountBtn').disabled = !status.canMount;
+    $('fuseUnmountBtn').disabled = !status.canUnmount;
+
+    if (!status.isFuseAvailable) {
+      log('FUSE is not available on this system. Install fuse3 package.', 'warn');
+    }
+  } catch (err) {
+    log(`FUSE refresh error: ${err.message}`, 'error');
+  }
+}
+
+$('fuseMountBtn').addEventListener('click', async () => {
+  try {
+    log('Mounting Proton Drive via FUSE…');
+    const result = await api.fuse.mount();
+    if (result.ok) log('FUSE mount successful');
+    else log(`FUSE mount failed: ${result.error}`, 'error');
+    refreshFuse();
+  } catch (err) { log(`FUSE mount error: ${err.message}`, 'error'); }
+});
+
+$('fuseUnmountBtn').addEventListener('click', async () => {
+  try {
+    log('Unmounting…');
+    await api.fuse.unmount();
+    log('FUSE unmounted');
+    refreshFuse();
+  } catch (err) { log(`FUSE unmount error: ${err.message}`, 'error'); }
+});
+
+$('fuseRefreshBtn').addEventListener('click', refreshFuse);
+
+// ── Updates ─────────────────────────────────────────────────
+
+let lastUpdateCheck = null;
+
+$('updateCheckBtn').addEventListener('click', async () => {
+  try {
+    $('updateCheckBtn').textContent = 'Checking…';
+    $('updateCheckBtn').disabled = true;
+    const result = await api.update.check();
+    const container = $('updateResult');
+    container.classList.remove('hidden');
+
+    if (result.hasUpdate) {
+      container.innerHTML = `
+        <p style="color:#49f29d">✓ Update available: <strong>${result.update.version}</strong></p>
+        <p>Published: ${formatWhen(result.update.publishedAt)}</p>
+        <p>${(result.update.body || '').slice(0, 300)}</p>
+      `;
+      $('updateDownloadBtn').classList.remove('hidden');
+      lastUpdateCheck = result;
+      log(`Update available: ${result.update.version}`);
+    } else {
+      container.innerHTML = `<p>✓ You're up to date (${result.currentVersion || '?'}). Latest: ${result.latestVersion || '?'}</p>`;
+      $('updateDownloadBtn').classList.add('hidden');
+      $('updateApplyBtn').classList.add('hidden');
+    }
+  } catch (err) {
+    log(`Update check error: ${err.message}`, 'error');
+    $('updateResult').innerHTML = `<p style="color:#ff9aae">✗ Update check failed: ${err.message}</p>`;
+  } finally {
+    $('updateCheckBtn').textContent = 'Check for updates';
+    $('updateCheckBtn').disabled = false;
+  }
+});
+
+$('updateDownloadBtn').addEventListener('click', async () => {
+  try {
+    $('updateDownloadBtn').textContent = 'Downloading…';
+    $('updateDownloadBtn').disabled = true;
+    $('updateProgress').classList.remove('hidden');
+
+    const available = lastUpdateCheck?.update || await api.update.getAvailable();
+    if (!available) {
+      log('No update available to download. Check first.', 'warn');
+      return;
+    }
+
+    const downloaded = await api.update.download(available);
+    $('updateProgress').classList.add('hidden');
+    $('updateDownloadBtn').classList.add('hidden');
+    $('updateApplyBtn').classList.remove('hidden');
+    $('updateResult').innerHTML += `<p style="color:#49f29d">✓ Downloaded: ${downloaded.name} (${(downloaded.size / 1024 / 1024).toFixed(1)} MB)</p>`;
+    log(`Update downloaded: ${downloaded.name}`);
+    window._lastDownloadedAsset = downloaded;
+  } catch (err) {
+    $('updateProgress').classList.add('hidden');
+    log(`Download error: ${err.message}`, 'error');
+    $('updateDownloadBtn').textContent = 'Download update';
+    $('updateDownloadBtn').disabled = false;
+  }
+});
+
+$('updateApplyBtn').addEventListener('click', async () => {
+  try {
+    const asset = window._lastDownloadedAsset;
+    if (!asset) { log('No downloaded asset to apply', 'warn'); return; }
+    const result = await api.update.apply(asset);
+    log(`Update ready: ${result.method} — ${result.instruction || result.path}`);
+    $('updateResult').innerHTML += `<p style="color:#ffd166">${result.instruction || 'Update applied. Restart to use new version.'}</p>`;
+  } catch (err) {
+    log(`Apply error: ${err.message}`, 'error');
+  }
+});
+
+// ── Live event subscriptions ────────────────────────────────
+
 api.onProgress(({ stream, text }) => log(text.trim(), stream === 'stderr' ? 'warn' : 'info'));
+api.onTransferComplete((payload) => {
+  log(`Transfer complete: ${payload.action}`, 'info');
+  refreshHistory();
+  refreshQueue();
+});
+api.onTransferError((payload) => {
+  log(`Transfer error: ${payload.action} — ${payload.error}`, 'error');
+  refreshQueue();
+});
+api.onSyncComplete((payload) => {
+  refreshSyncDashboard();
+  refreshConflicts();
+});
+api.onSyncError((payload) => {
+  log(`Sync error: ${payload.message}`, 'error');
+});
+api.onLocalChange((payload) => log(`Local change: ${payload.type} ${payload.path}`, 'info'));
+api.onRemoteChange((payload) => log(`Remote change: ${payload.type} ${payload.path}`, 'info'));
+
+// ── Original button handlers ────────────────────────────────
 
 $('refreshBtn').addEventListener('click', () => run('Refresh', refreshFiles));
 $('loginBtn').addEventListener('click', () => run('Login', () => api.login()));
@@ -201,6 +609,8 @@ $('saveBackupProfileBtn').addEventListener('click', () => run('Save backup profi
 }));
 $('runBackupProfileBtn').addEventListener('click', () => run('Run backup profile', () => api.runBackupProfile()));
 
+// ── Boot ────────────────────────────────────────────────────
+
 async function boot() {
   state.localFolder = await api.getDefaultLocalFolder();
   $('localFolderInput').value = state.localFolder;
@@ -209,6 +619,9 @@ async function boot() {
   const status = await refreshStatus();
   if (!status.busy && status.authenticated) refreshFiles().catch(err => log(err.message, 'error'));
   if (status.busy) log('Proton CLI cache is currently busy. Wait for the active download to finish, then refresh.', 'warn');
+  // Load sync/fuse/conflict stats in background
+  refreshSyncDashboard().catch(() => {});
+  refreshFuse().catch(() => {});
 }
 
 boot().catch(err => log(err.message, 'error'));

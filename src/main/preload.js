@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('auxProtonBridge', {
+contextBridge.exposeInMainWorld('auxProtonDriveBridge', {
+  // Core
   getDefaultLocalFolder: () => ipcRenderer.invoke('proton:getDefaultLocalFolder'),
   getStatus: () => ipcRenderer.invoke('proton:getStatus'),
   listMyFiles: () => ipcRenderer.invoke('proton:listMyFiles'),
@@ -18,9 +19,98 @@ contextBridge.exposeInMainWorld('auxProtonBridge', {
   getBackupProfile: () => ipcRenderer.invoke('proton:getBackupProfile'),
   saveBackupProfile: (profile) => ipcRenderer.invoke('proton:saveBackupProfile', profile),
   runBackupProfile: () => ipcRenderer.invoke('proton:runBackupProfile'),
+
+  // Sync metadata DB
+  sync: {
+    getStats: () => ipcRenderer.invoke('sync:getStats'),
+    listTrackedFiles: (stateFilter) => ipcRenderer.invoke('sync:listTrackedFiles', stateFilter),
+    listFilesNeedingSync: () => ipcRenderer.invoke('sync:listFilesNeedingSync'),
+    getEvents: (fileId, limit) => ipcRenderer.invoke('sync:getEvents', fileId, limit),
+    clearEvents: () => ipcRenderer.invoke('sync:clearEvents'),
+    countByState: () => ipcRenderer.invoke('sync:countByState'),
+    getTrackedFile: (remotePath) => ipcRenderer.invoke('sync:getTrackedFile', remotePath),
+    saveCheckpoint: () => ipcRenderer.invoke('sync:saveCheckpoint')
+  },
+
+  // Transfer queue
+  transfer: {
+    enqueue: (action, options, priority) => ipcRenderer.invoke('transfer:enqueue', action, options, priority),
+    cancel: (id) => ipcRenderer.invoke('transfer:cancel', id),
+    cancelAll: () => ipcRenderer.invoke('transfer:cancelAll'),
+    pause: () => ipcRenderer.invoke('transfer:pause'),
+    resume: () => ipcRenderer.invoke('transfer:resume'),
+    getState: () => ipcRenderer.invoke('transfer:getState')
+  },
+
+  // Conflicts
+  conflict: {
+    listActive: () => ipcRenderer.invoke('conflict:listActive'),
+    listAll: () => ipcRenderer.invoke('conflict:listAll'),
+    resolve: (conflictId, strategy) => ipcRenderer.invoke('conflict:resolve', conflictId, strategy),
+    getStats: () => ipcRenderer.invoke('conflict:getStats')
+  },
+
+  // Sync engine
+  syncEngine: {
+    start: (syncMode, syncFolder, intervalMs) => ipcRenderer.invoke('sync:start', syncMode, syncFolder, intervalMs),
+    stop: () => ipcRenderer.invoke('sync:stop'),
+    scanNow: () => ipcRenderer.invoke('sync:scanNow'),
+    getState: () => ipcRenderer.invoke('sync:getState'),
+    setMode: (mode) => ipcRenderer.invoke('sync:setMode', mode),
+    setPollInterval: (ms) => ipcRenderer.invoke('sync:setPollInterval', ms)
+  },
+
+  // Auto-update
+  update: {
+    check: () => ipcRenderer.invoke('update:check'),
+    checkAndDownload: () => ipcRenderer.invoke('update:checkAndDownload'),
+    download: () => ipcRenderer.invoke('update:download'),
+    apply: (downloadedAsset) => ipcRenderer.invoke('update:apply', downloadedAsset),
+    getAvailable: () => ipcRenderer.invoke('update:getAvailable')
+  },
+
+  // FUSE mount
+  fuse: {
+    mount: () => ipcRenderer.invoke('fuse:mount'),
+    unmount: () => ipcRenderer.invoke('fuse:unmount'),
+    getStatus: () => ipcRenderer.invoke('fuse:getStatus'),
+    isAvailable: () => ipcRenderer.invoke('fuse:isAvailable')
+  },
+
+  // Progress / event subscriptions
   onProgress: (callback) => {
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on('proton:progress', handler);
     return () => ipcRenderer.removeListener('proton:progress', handler);
+  },
+  onTransferComplete: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('proton:transferComplete', handler);
+    return () => ipcRenderer.removeListener('proton:transferComplete', handler);
+  },
+  onTransferError: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('proton:transferError', handler);
+    return () => ipcRenderer.removeListener('proton:transferError', handler);
+  },
+  onLocalChange: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('proton:localChange', handler);
+    return () => ipcRenderer.removeListener('proton:localChange', handler);
+  },
+  onRemoteChange: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('proton:remoteChange', handler);
+    return () => ipcRenderer.removeListener('proton:remoteChange', handler);
+  },
+  onSyncComplete: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('proton:syncComplete', handler);
+    return () => ipcRenderer.removeListener('proton:syncComplete', handler);
+  },
+  onSyncError: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('proton:syncError', handler);
+    return () => ipcRenderer.removeListener('proton:syncError', handler);
   }
 });

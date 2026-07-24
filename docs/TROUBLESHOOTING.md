@@ -1,8 +1,8 @@
-# Troubleshooting Aux Proton Bridge
+# Troubleshooting Aux Proton Drive Bridge
 
 ## `proton-drive: command not found`
 
-Aux Proton Bridge requires Proton's official CLI to be installed as `proton-drive`.
+Aux Proton Drive Bridge requires Proton's official CLI to be installed as `proton-drive`.
 
 Check:
 
@@ -20,20 +20,20 @@ Try logging in manually from a terminal:
 proton-drive auth login
 ```
 
-Complete the browser login, then restart Aux Proton Bridge and click **Refresh status**.
+Complete the browser login, then restart Aux Proton Drive Bridge and click **Refresh status**.
 
 ## Login succeeds but app still says not authenticated
 
 Try:
 
-1. Close Aux Proton Bridge.
+1. Close Aux Proton Drive Bridge.
 2. Run:
 
 ```bash
 proton-drive filesystem list /my-files
 ```
 
-3. If the CLI lists files, reopen Aux Proton Bridge.
+3. If the CLI lists files, reopen Aux Proton Drive Bridge.
 4. If the CLI fails, fix CLI auth/keyring first.
 
 ## Keyring / secret storage errors
@@ -56,7 +56,7 @@ Fix:
 
 1. Let the running Proton CLI operation finish.
 2. Do not start multiple large downloads at once.
-3. Restart Aux Proton Bridge if needed.
+3. Restart Aux Proton Drive Bridge if needed.
 4. Click **Refresh status**.
 
 The app serializes operations it starts, but cannot prevent separate terminal operations from locking the CLI cache.
@@ -100,7 +100,7 @@ Options:
 Try installing with dependency resolution:
 
 ```bash
-sudo apt install ./Aux.Proton.Bridge-0.1.0-amd64.deb
+sudo apt install ./Aux.Proton.Drive.Bridge-0.1.0-amd64.deb
 ```
 
 If you used `dpkg` and dependencies failed:
@@ -114,13 +114,13 @@ sudo apt -f install
 Fedora/RHEL-family:
 
 ```bash
-sudo dnf install ./Aux.Proton.Bridge-0.1.0-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-0.1.0-x86_64.rpm
 ```
 
 openSUSE:
 
 ```bash
-sudo zypper install ./Aux.Proton.Bridge-0.1.0-x86_64.rpm
+sudo zypper install ./Aux.Proton.Drive.Bridge-0.1.0-x86_64.rpm
 ```
 
 ## White screen or app window opens blank
@@ -136,7 +136,7 @@ npm start
 If using AppImage:
 
 ```bash
-./Aux.Proton.Bridge-0.1.0-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-0.1.0-x86_64.AppImage
 ```
 
 ## Files downloaded to the wrong folder
@@ -159,7 +159,7 @@ Include:
 
 - Linux distribution/version
 - install method: AppImage, `.deb`, `.rpm`, or source
-- Aux Proton Bridge version
+- Aux Proton Drive Bridge version
 - Proton Drive CLI version
 - what you clicked
 - what you expected
