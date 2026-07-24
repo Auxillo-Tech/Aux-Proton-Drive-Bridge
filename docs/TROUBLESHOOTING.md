@@ -74,7 +74,7 @@ Check:
 
 ## Existing files are not overwritten
 
-This is expected in v0.1.0.
+This is expected behavior.
 
 Downloads use:
 
@@ -83,7 +83,7 @@ file conflicts: skip
 folder conflicts: merge
 ```
 
-This is intentionally conservative.
+This is intentionally conservative. The file conflict strategy can be changed in the backup profile settings for individual operations.
 
 ## AppImage does not launch
 
@@ -100,7 +100,7 @@ Options:
 Try installing with dependency resolution:
 
 ```bash
-sudo apt install ./Aux.Proton.Drive.Bridge-0.1.0-amd64.deb
+sudo apt install ./Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
 ```
 
 If you used `dpkg` and dependencies failed:
@@ -114,13 +114,13 @@ sudo apt -f install
 Fedora/RHEL-family:
 
 ```bash
-sudo dnf install ./Aux.Proton.Drive.Bridge-0.1.0-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
 ```
 
 openSUSE:
 
 ```bash
-sudo zypper install ./Aux.Proton.Drive.Bridge-0.1.0-x86_64.rpm
+sudo zypper install ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
 ```
 
 ## White screen or app window opens blank
@@ -136,7 +136,7 @@ npm start
 If using AppImage:
 
 ```bash
-./Aux.Proton.Drive.Bridge-0.1.0-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
 ```
 
 ## Files downloaded to the wrong folder
@@ -149,9 +149,29 @@ Recommended default style:
 /home/you/ProtonDrive
 ```
 
-## Upload went to the wrong remote location
+## Sync engine shows "Idle" but changes aren't syncing
 
-v0.1.0 uploads to `/my-files` through the CLI wrapper. More advanced remote destination selection is future work.
+Check:
+
+1. The sync engine is started (Sync tab → Start sync).
+2. The sync mode is correct for your use case.
+3. The Proton CLI is authenticated and not busy.
+4. The poll interval hasn't been set too high.
+
+Click **Scan now** to trigger an immediate sync cycle.
+
+## Conflicts detected — what now?
+
+Go to the **Conflicts** tab to see all detected conflicts. For each conflict, choose a resolution strategy:
+
+- **keep_local** — Upload your local version to Proton Drive
+- **keep_remote** — Download the remote version from Proton Drive
+- **keep_both** — Rename both versions with a conflict suffix
+- **skip** — Leave both sides unchanged
+
+## Updates tab shows "Offline"
+
+The app couldn't reach GitHub's API. Check your internet connection and try again. The app uses an authenticated GitHub API call (via your `gh` CLI token) to check for updates from the private repository.
 
 ## How to report a bug
 

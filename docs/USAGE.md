@@ -1,10 +1,10 @@
 # Use Aux Proton Drive Bridge
 
-Aux Proton Drive Bridge is a GUI for Proton Drive operations through Proton's official `proton-drive` CLI.
+Aux Proton Drive Bridge is a desktop GUI for Proton Drive operations through Proton's official `proton-drive` CLI.
 
 ## What it is
 
-A Linux desktop bridge for manual Proton Drive operations:
+A Linux desktop bridge for Proton Drive operations:
 
 - sign in/out
 - check CLI/auth status
@@ -13,20 +13,26 @@ A Linux desktop bridge for manual Proton Drive operations:
 - download everything visible from `/my-files`
 - upload local files/folders
 - choose and open a local destination folder
-- view activity logs
+- view activity logs and operation history
+- one-way backup profile with scheduler (30 min)
+- background sync engine with local file watching and remote polling
+- conflict detection and resolution
+- live transfer queue with pause/resume/cancel
+- software update checking via GitHub Releases
+- optional FUSE mount
 
-## What it is not yet
+## Tab overview
 
-v0.2.1 is **not yet** a full bidirectional sync daemon.
+The app is organized into tabs:
 
-It does not yet provide:
-
-- automatic background two-way sync
-- remote delete propagation
-- local delete propagation
-- conflict database/review UI
-- tray daemon
-- selective sync profiles
+| Tab | Purpose |
+|---|---|
+| **Files** | Manual file listing, download, upload, backup profile |
+| **Sync** | Sync engine — start/stop, mode selection, pending items |
+| **Conflicts** | Conflict detection and resolution |
+| **Queue** | Live transfer queue — active, pending, completed transfers |
+| **FUSE Mount** | Mount Proton Drive as a filesystem directory |
+| **Updates** | Check for and download software updates |
 
 ## Sign in
 
@@ -95,6 +101,58 @@ Use this carefully for large Proton Drive accounts. The Proton CLI can take a lo
 
 Current default remote destination is `/my-files`.
 
+## Background sync
+
+The **Sync** tab lets you start the background sync engine.
+
+### Sync modes
+
+| Mode | Behavior |
+|---|---|
+| **Conservative** (default) | Upload only, skip existing files, merge folders. Safest for first use. |
+| **One-way upload** | Local changes → Remote. Does not download. |
+| **One-way download** | Remote changes → Local. Does not upload. |
+| **Bidirectional** | Full two-way sync. Experimental — start with Conservative mode first. |
+
+### How to use
+
+1. Switch to the **Sync** tab.
+2. Select a sync mode (start with Conservative).
+3. Click **Start sync**.
+4. The sync engine watches for local file changes and polls the remote state.
+5. Pending sync items appear in the pending list.
+6. Individual transfers go through the transfer queue.
+7. Click **Scan now** to trigger an immediate sync cycle.
+
+> ⚠ Bidirectional sync is experimental. Start with **Conservative** mode and verify behavior before switching.
+
+## Transfer queue
+
+The **Queue** tab shows the current state of all transfers:
+
+- **Active** — Currently running transfers
+- **Pending** — Queued transfers waiting to start
+- **Recent completed** — Recently finished or failed transfers
+
+You can **pause**, **resume**, or **cancel** transfers from this tab.
+
+## Conflicts
+
+When the sync engine detects that a file changed both locally and remotely, it records a **conflict**. The **Conflicts** tab shows all active conflicts with resolution options:
+
+| Strategy | Effect |
+|---|---|
+| **keep_local** | Upload local version, overwriting remote |
+| **keep_remote** | Download remote version, overwriting local |
+| **keep_both** | Rename both sides with conflict suffix |
+| **skip** | Leave both sides as-is |
+
+## FUSE mount
+
+If your system has FUSE support (`/dev/fuse`, `fusermount3` installed), you can mount Proton Drive as a local directory using the **FUSE Mount** tab.
+
+This depends on the `proton-drive` CLI having FUSE mount capabilities.
+
 ## Activity log
 
 The activity log shows app/CLI progress and errors.
@@ -111,7 +169,7 @@ Fix:
 2. Click **Refresh status**.
 3. Retry the action.
 
-The app serializes operations it starts itself, but it cannot control separate terminal processes already running outside the app.
+The app serializes operations it starts, but it cannot control separate terminal processes already running outside the app.
 
 ## Safe workflow for first use
 
@@ -121,6 +179,7 @@ The app serializes operations it starts itself, but it cannot control separate t
 4. Confirm local files look right.
 5. Then download larger folders.
 6. Keep `file conflicts: skip` behavior until you trust the workflow.
+7. When ready, start the sync engine in **Conservative** mode.
 
 ## Recommended local folder
 
@@ -132,11 +191,15 @@ A normal local folder under your home directory is safest:
 
 Avoid system folders and removable drives until the workflow has been tested.
 
-## Updating the app
+## Software updates
 
-Download the newer release artifact from GitHub Releases and install it over the old version.
+Open the **Updates** tab and click **Check for updates**. If a new version is available:
 
-For AppImage users, replace the old AppImage file with the new one.
+1. Click **Download update**.
+2. When the download completes, the app shows install instructions.
+3. Follow the instructions (e.g., `sudo rpm -Uvh <file>` for RPM-based systems).
+
+The app also checks for updates automatically every 6 hours when running.
 
 ## Uninstalling
 

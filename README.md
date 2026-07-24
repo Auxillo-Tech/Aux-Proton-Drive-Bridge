@@ -168,17 +168,19 @@ See [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Roadmap
 
-### Coming
+### v0.3.0
 
-- Proper sync metadata DB → done in v0.3.0
-- Live transfer queue → done in v0.3.0
-- Progress parser → done in v0.3.0
-- Conflict system → done in v0.3.0
-- Bidirectional sync → done in v0.3.0
-- Auto-update → done in v0.3.0
-- Signing/attestation → done in v0.3.0
-- File manager integration → done in v0.3.0
-- Optional FUSE mount → done in v0.3.0
+All items from the v0.2.x roadmap are now implemented:
+
+- Sync metadata DB (SQLite)
+- Live transfer queue
+- Progress parser
+- Conflict system
+- Bidirectional sync
+- Auto-update via GitHub Releases
+- Signing/attestation scripts
+- File manager integration
+- Optional FUSE mount
 
 ### Future
 
