@@ -20,6 +20,15 @@ contextBridge.exposeInMainWorld('auxProtonDriveBridge', {
   saveBackupProfile: (profile) => ipcRenderer.invoke('proton:saveBackupProfile', profile),
   runBackupProfile: () => ipcRenderer.invoke('proton:runBackupProfile'),
 
+  // Multi-profile
+  profile: {
+    list: () => ipcRenderer.invoke('profile:list'),
+    get: (id) => ipcRenderer.invoke('profile:get', id),
+    save: (profile) => ipcRenderer.invoke('profile:save', profile),
+    delete: (id) => ipcRenderer.invoke('profile:delete', id),
+    getActive: () => ipcRenderer.invoke('profile:getActive')
+  },
+
   // Sync metadata DB
   sync: {
     getStats: () => ipcRenderer.invoke('sync:getStats'),

@@ -28,7 +28,17 @@ for (const mod of newModules) {
   if (!fs.existsSync(p)) throw new Error(`Missing new module: src/main/${mod}`);
 }
 // IPC handlers for new features
-for (const api of ['sync:getStats', 'transfer:enqueue', 'conflict:listActive', 'sync:start', 'update:check', 'fuse:mount']) {
+for (const api of ['sync:getStats', 'transfer:enqueue', 'conflict:listActive', 'sync:start', 'update:check', 'fuse:mount', 'profile:list', 'profile:save']) {
   if (!main.includes(api)) throw new Error(`IPC handler missing: ${api}`);
+}
+// Check new APIs in preload
+for (const api of ['profile.list', 'profile.save', 'profile.getActive', 'sync.getStats', 'transfer.enqueue', 'conflict.listActive', 'syncEngine.start', 'update.check', 'fuse.mount']) {
+  if (!preload.includes(api)) throw new Error(`Preload API missing: ${api}`);
+}
+// Check new docs and config files exist
+const extraFiles = ['LICENSE', 'dist/aur/PKGBUILD', 'dist/aur/.SRCINFO', 'dist/flatpak/tech.auxillo.auxprotondrivebridge.json'];
+for (const f of extraFiles) {
+  const p = path.join(__dirname, '..', f);
+  if (!fs.existsSync(p)) throw new Error(`Missing file: ${f}`);
 }
 console.log('static checks passed');

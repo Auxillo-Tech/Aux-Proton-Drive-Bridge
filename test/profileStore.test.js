@@ -23,5 +23,5 @@ test('backup profile defaults to skip/merge/no-delete', () => {
   assert.equal(profile.fileConflictStrategy, 'skip');
   assert.equal(profile.folderConflictStrategy, 'merge');
   assert.equal(profile.deletePropagation, false);
-  assert.equal(profile.mode, 'one-way-upload');
+  assert.equal(profile.mode, 'conservative');
 });

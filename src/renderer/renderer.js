@@ -77,6 +77,13 @@ function formatWhen(value) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function operationSummary(op) {
   const options = op.options || {};
   if (Array.isArray(options.paths) && options.paths.length) return options.paths.slice(0, 3).join(', ') + (options.paths.length > 3 ? ` +${options.paths.length - 3}` : '');
@@ -293,10 +300,29 @@ async function refreshConflicts() {
       const row = document.createElement('div');
       row.className = 'conflict-row';
       const info = document.createElement('div');
+      const localSize = conflict.localSize ? formatBytes(conflict.localSize) : '—';
+      const remoteSize = conflict.remoteSize ? formatBytes(conflict.remoteSize) : '—';
       info.innerHTML = `
         <div class="conflict-type">${conflict.type}</div>
         <div class="conflict-path">${conflict.remotePath}</div>
         <div class="conflict-reason">${conflict.reason}</div>
+        <details class="conflict-diff">
+          <summary>Show metadata diff</summary>
+          <div class="diff-container">
+            <div class="diff-side local">
+              <div class="diff-header">Local</div>
+              <div class="diff-item"><strong>Size:</strong> ${localSize}</div>
+              <div class="diff-item"><strong>Modified:</strong> ${formatWhen(conflict.localModified)}</div>
+              <div class="diff-item"><strong>Hash:</strong> ${(conflict.localHash || '—').slice(0, 16)}</div>
+            </div>
+            <div class="diff-side remote">
+              <div class="diff-header">Remote</div>
+              <div class="diff-item"><strong>Size:</strong> ${remoteSize}</div>
+              <div class="diff-item"><strong>Modified:</strong> ${formatWhen(conflict.remoteModified)}</div>
+              <div class="diff-item"><strong>Hash:</strong> ${(conflict.remoteHash || '—').slice(0, 16)}</div>
+            </div>
+          </div>
+        </details>
       `;
       const actions = document.createElement('div');
       actions.className = 'conflict-actions';
