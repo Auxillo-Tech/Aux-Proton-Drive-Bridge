@@ -470,59 +470,118 @@ $('fuseRefreshBtn').addEventListener('click', refreshFuse);
 // ── Updates ─────────────────────────────────────────────────
 
 let lastUpdateCheck = null;
+let updateCheckedThisSession = false;
 
-$('updateCheckBtn').addEventListener('click', async () => {
+async function refreshUpdates() {
+  showStatus('info', 'Checking for updates…');
   try {
-    $('updateCheckBtn').textContent = 'Checking…';
-    $('updateCheckBtn').disabled = true;
     const result = await api.update.check();
-    const container = $('updateResult');
-    container.classList.remove('hidden');
+    updateCheckedThisSession = true;
+    lastUpdateCheck = result;
+    $('updateLatestVersion').textContent = result.latestVersion || (result.update?.version) || '—';
 
+    const banner = $('updateBanner');
     if (result.hasUpdate) {
-      container.innerHTML = `
-        <p style="color:#49f29d">✓ Update available: <strong>${result.update.version}</strong></p>
-        <p>Published: ${formatWhen(result.update.publishedAt)}</p>
-        <p>${(result.update.body || '').slice(0, 300)}</p>
+      banner.className = 'update-banner';
+      banner.innerHTML = `
+        <strong style="font-size:16px">✓ Update available: v${result.update.version}</strong><br/>
+        <span>${formatWhen(result.update.publishedAt)}</span>
+        ${result.update.body ? `<p style="margin-top:6px;opacity:.8">${result.update.body.slice(0, 300)}</p>` : ''}
       `;
       $('updateDownloadBtn').classList.remove('hidden');
-      lastUpdateCheck = result;
-      log(`Update available: ${result.update.version}`);
-    } else {
-      container.innerHTML = `<p>✓ You're up to date (${result.currentVersion || '?'}). Latest: ${result.latestVersion || '?'}</p>`;
+      $('updateApplyBtn').classList.add('hidden');
+      $('updateInstallHelp').classList.add('hidden');
+      log(`Update available: v${result.update.version}`);
+    } else if (result.error) {
+      showStatus('error', `Update check failed: ${result.error}`);
       $('updateDownloadBtn').classList.add('hidden');
       $('updateApplyBtn').classList.add('hidden');
+    } else {
+      banner.className = 'update-banner';
+      banner.innerHTML = `<strong>✓ You're up to date</strong><br/>
+        <span>Installed v${result.currentVersion || '0.3.0'} — latest is v${result.latestVersion || '0.3.0'}</span>`;
+      $('updateDownloadBtn').classList.add('hidden');
+      $('updateApplyBtn').classList.add('hidden');
+      $('updateInstallHelp').classList.add('hidden');
     }
+    $('updateResult').classList.remove('hidden');
   } catch (err) {
+    showStatus('error', `Update check failed: ${err.message}`);
     log(`Update check error: ${err.message}`, 'error');
-    $('updateResult').innerHTML = `<p style="color:#ff9aae">✗ Update check failed: ${err.message}</p>`;
-  } finally {
-    $('updateCheckBtn').textContent = 'Check for updates';
-    $('updateCheckBtn').disabled = false;
   }
-});
+}
+
+function showStatus(type, text) {
+  const banner = $('updateBanner');
+  banner.className = `update-banner ${type === 'error' ? 'error' : type === 'info' ? 'info' : ''}`;
+  banner.textContent = text;
+  $('updateResult').classList.remove('hidden');
+}
+
+// Auto-check on first tab switch to Updates
+const _origSwitchTab = switchTab;
+switchTab = function(name) {
+  _origSwitchTab(name);
+  if (name === 'updates' && !updateCheckedThisSession) {
+    refreshUpdates();
+  }
+};
+
+$('updateCheckBtn').addEventListener('click', refreshUpdates);
 
 $('updateDownloadBtn').addEventListener('click', async () => {
   try {
     $('updateDownloadBtn').textContent = 'Downloading…';
     $('updateDownloadBtn').disabled = true;
     $('updateProgress').classList.remove('hidden');
+    $('progressFill').style.width = '0%';
+    $('updateProgressText').textContent = 'Starting download…';
+
+    // Start download with animated progress indicator
+    $('updateProgressText').textContent = 'Downloading update…';
+    $('progressFill').style.width = '30%';
 
     const available = lastUpdateCheck?.update || await api.update.getAvailable();
     if (!available) {
-      log('No update available to download. Check first.', 'warn');
+      showStatus('error', 'No update available. Click "Check for updates" first.');
       return;
     }
 
+    $('progressFill').style.width = '60%';
     const downloaded = await api.update.download(available);
-    $('updateProgress').classList.add('hidden');
+
+    $('progressFill').style.width = '100%';
+    $('updateProgressText').textContent = 'Download complete!';
+    setTimeout(() => {
+      $('updateProgress').classList.add('hidden');
+    }, 1500);
+
     $('updateDownloadBtn').classList.add('hidden');
     $('updateApplyBtn').classList.remove('hidden');
-    $('updateResult').innerHTML += `<p style="color:#49f29d">✓ Downloaded: ${downloaded.name} (${(downloaded.size / 1024 / 1024).toFixed(1)} MB)</p>`;
-    log(`Update downloaded: ${downloaded.name}`);
     window._lastDownloadedAsset = downloaded;
+    log(`Update downloaded: ${downloaded.name}`);
+
+    // Show install help based on file type
+    const helpEl = $('updateInstallHelp');
+    const helpText = $('updateInstallText');
+    if (downloaded.name.endsWith('.rpm')) {
+      helpText.textContent = `sudo dnf install "${downloaded.filePath}"`;
+    } else if (downloaded.name.endsWith('.deb')) {
+      helpText.textContent = `sudo dpkg -i "${downloaded.filePath}"`;
+    } else if (downloaded.name.endsWith('.AppImage')) {
+      helpText.textContent = `chmod +x "${downloaded.filePath}" && "${downloaded.filePath}"`;
+    } else {
+      helpText.textContent = `Extract "${downloaded.name}" and replace the application files.`;
+    }
+    helpEl.classList.remove('hidden');
+
+    $('updateBanner').innerHTML = `
+      <strong>✓ Downloaded</strong><br/>
+      <span>${downloaded.name} (${(downloaded.size / 1024 / 1024).toFixed(1)} MB)</span>
+    `;
   } catch (err) {
     $('updateProgress').classList.add('hidden');
+    showStatus('error', `Download failed: ${err.message}`);
     log(`Download error: ${err.message}`, 'error');
     $('updateDownloadBtn').textContent = 'Download update';
     $('updateDownloadBtn').disabled = false;
@@ -532,11 +591,19 @@ $('updateDownloadBtn').addEventListener('click', async () => {
 $('updateApplyBtn').addEventListener('click', async () => {
   try {
     const asset = window._lastDownloadedAsset;
-    if (!asset) { log('No downloaded asset to apply', 'warn'); return; }
+    if (!asset) { showStatus('error', 'No downloaded asset to apply. Download first.'); return; }
     const result = await api.update.apply(asset);
-    log(`Update ready: ${result.method} — ${result.instruction || result.path}`);
-    $('updateResult').innerHTML += `<p style="color:#ffd166">${result.instruction || 'Update applied. Restart to use new version.'}</p>`;
+    log(`Update ready: ${result.method}`);
+    $('updateBanner').innerHTML = `
+      <strong>✓ Ready to install</strong><br/>
+      <span>${result.instruction || 'Restart the app to use the new version.'}</span>
+    `;
+    // Show the install instructions again for reference
+    const helpText = $('updateInstallText');
+    if (result.instruction) helpText.textContent = result.instruction;
+    $('updateInstallHelp').classList.remove('hidden');
   } catch (err) {
+    showStatus('error', `Apply error: ${err.message}`);
     log(`Apply error: ${err.message}`, 'error');
   }
 });
