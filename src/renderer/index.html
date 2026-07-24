@@ -217,14 +217,33 @@
           <button id="updateCheckBtn">Check for updates</button>
         </div>
         <div id="updateStatus" class="update-status">
-          <p id="updateCurrentVersion">Current version: <strong>0.3.0</strong></p>
-          <div id="updateResult" class="hidden"></div>
+          <div class="version-display">
+            <div class="version-box">
+              <small>Installed</small>
+              <strong id="updateCurrentVersion">0.3.0</strong>
+            </div>
+            <span class="version-arrow">→</span>
+            <div class="version-box" id="latestVersionBox">
+              <small>Latest</small>
+              <strong id="updateLatestVersion">—</strong>
+            </div>
+          </div>
+          <div id="updateResult" class="hidden">
+            <div class="update-banner" id="updateBanner"></div>
+          </div>
         </div>
-        <div id="updateProgress" class="hidden">
-          <p>Downloading update…</p>
+        <div id="updateProgress" class="hidden update-progress">
+          <div class="progress-bar-wrapper">
+            <div class="progress-bar-fill" id="progressFill"></div>
+          </div>
+          <p id="updateProgressText">Checking…</p>
         </div>
         <button id="updateDownloadBtn" class="wide hidden">Download update</button>
         <button id="updateApplyBtn" class="wide secondary hidden">Apply update</button>
+        <div id="updateInstallHelp" class="note hidden">
+          <strong>Install instructions:</strong>
+          <p id="updateInstallText"></p>
+        </div>
       </section>
     </section>
 
