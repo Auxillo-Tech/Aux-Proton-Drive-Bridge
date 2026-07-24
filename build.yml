@@ -27,4 +27,3 @@ rpm:
   depends:
     - libsecret
     - xdg-utils
-publish: null

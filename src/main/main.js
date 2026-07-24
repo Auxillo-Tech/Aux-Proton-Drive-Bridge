@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const { DEFAULT_LOCAL_FOLDER, getStatus, parseListOutput, runProton } = require('./protonCli');
 const { createOperationStore } = require('./operationStore');
 const { createProfileStore } = require('./profileStore');
@@ -103,8 +104,6 @@ function getFuseMount() {
   if (!fuseMount) fuseMount = createFuseMount({ mountPoint: path.join(os.homedir(), 'ProtonDrive-FUSE') });
   return fuseMount;
 }
-
-const os = require('node:os');
 
 // ── Progress/operation helpers ──────────────────────────────
 
