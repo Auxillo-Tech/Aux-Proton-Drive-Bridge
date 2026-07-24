@@ -23,9 +23,8 @@
     "release:source": "node scripts/make-source-archives.js",
     "release:sign": "bash scripts/sign-release.sh",
     "release:sign:verify": "bash scripts/sign-release.sh --verify",
-    "release:all": "npm run check && npm run dist:x64 && npm run release:source && npm run release:manifest && npm run release:sign",
-    "integration:file-manager": "bash scripts/install-file-manager-integration.sh",
-    "sync:devices": "bash scripts/install-sync-devices.sh"
+    "release:all": "npm run check && npm run smoke:source && npm run dist:x64 && npm run release:source && npm run release:manifest && npm run release:sign && npm run smoke:appimage",
+    "integration:file-manager": "bash scripts/install-file-manager-integration.sh"
   },
   "devDependencies": {
     "electron": "^43.2.0",
