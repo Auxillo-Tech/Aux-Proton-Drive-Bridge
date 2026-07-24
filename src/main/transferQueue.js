@@ -153,8 +153,21 @@ function createTransferQueue(options = {}) {
       let stdout = '';
       let stderr = '';
       const allLines = [];
+      let settled = false;
+
+      function settle(err, result) {
+        if (settled) return;
+        settled = true;
+        if (err) reject(err);
+        else resolve(result);
+      }
+
+      function cleanupChild() {
+        try { if (!child.killed) child.kill('SIGKILL'); } catch {}
+      }
 
       child.stdout.on('data', data => {
+        if (settled) return;
         const text = data.toString();
         stdout += text;
         const lines = text.split('\n').filter(Boolean);
@@ -169,6 +182,7 @@ function createTransferQueue(options = {}) {
       });
 
       child.stderr.on('data', data => {
+        if (settled) return;
         const text = data.toString();
         stderr += text;
         const lines = text.split('\n').filter(Boolean);
@@ -182,20 +196,25 @@ function createTransferQueue(options = {}) {
         emit('progress', { id: item.id, action: item.action, stream: 'stderr', text: text.trim(), ts: new Date().toISOString() });
       });
 
-      child.on('error', reject);
+      child.on('error', (err) => settle(err));
 
       child.on('close', code => {
         const result = { code, stdout, stderr, command: [bin, ...args] };
 
         if (code === 0) {
           const summary = summarizeTransfer(allLines);
-          resolve({ ...result, summary });
+          settle(null, { ...result, summary });
         } else {
           const err = new Error(stderr.trim() || stdout.trim() || `proton-drive exited ${code}`);
           err.result = result;
-          reject(err);
+          settle(err);
         }
       });
+
+      // Ensure child cleanup if signal aborts
+      if (signal && typeof signal.addEventListener === 'function') {
+        signal.addEventListener('abort', cleanupChild, { once: true });
+      }
     });
   }
 

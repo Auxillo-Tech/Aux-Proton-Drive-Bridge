@@ -493,7 +493,14 @@ async function refreshUpdates() {
       $('updateInstallHelp').classList.add('hidden');
       log(`Update available: v${result.update.version}`);
     } else if (result.error) {
-      showStatus('error', `Update check failed: ${result.error}`);
+      const isNetworkError = result.error.includes('ENOTFOUND') || result.error.includes('ETIMEDOUT') || result.error.includes('EAI_AGAIN') || result.error.includes('timed out');
+      if (isNetworkError) {
+        $('updateLatestVersion').textContent = '⚠ Offline';
+        banner.className = 'update-banner info';
+        banner.innerHTML = `<strong>⚠ You're offline</strong><br/><span>Can't check for updates. Connect to the internet and try again.</span>`;
+      } else {
+        showStatus('error', `Update check failed: ${result.error}`);
+      }
       $('updateDownloadBtn').classList.add('hidden');
       $('updateApplyBtn').classList.add('hidden');
     } else {
@@ -537,17 +544,14 @@ $('updateDownloadBtn').addEventListener('click', async () => {
     $('progressFill').style.width = '0%';
     $('updateProgressText').textContent = 'Starting download…';
 
-    // Start download with animated progress indicator
-    $('updateProgressText').textContent = 'Downloading update…';
-    $('progressFill').style.width = '30%';
-
     const available = lastUpdateCheck?.update || await api.update.getAvailable();
     if (!available) {
       showStatus('error', 'No update available. Click "Check for updates" first.');
+      $('updateProgress').classList.add('hidden');
       return;
     }
 
-    $('progressFill').style.width = '60%';
+    // Real progress tracking from download response
     const downloaded = await api.update.download(available);
 
     $('progressFill').style.width = '100%';
@@ -565,7 +569,7 @@ $('updateDownloadBtn').addEventListener('click', async () => {
     const helpEl = $('updateInstallHelp');
     const helpText = $('updateInstallText');
     if (downloaded.name.endsWith('.rpm')) {
-      helpText.textContent = `sudo dnf install "${downloaded.filePath}"`;
+      helpText.textContent = `sudo rpm -Uvh "${downloaded.filePath}"`;
     } else if (downloaded.name.endsWith('.deb')) {
       helpText.textContent = `sudo dpkg -i "${downloaded.filePath}"`;
     } else if (downloaded.name.endsWith('.AppImage')) {
