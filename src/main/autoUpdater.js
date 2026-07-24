@@ -79,7 +79,8 @@ function createAutoUpdater(options = {}) {
 
   function httpsGet(url) {
     return new Promise((resolve, reject) => {
-      https.get(url, { headers: buildHeaders() }, (res) => {
+      const req = https.get(url, { headers: buildHeaders(), timeout: 10000 }, (res) => {
+        res.setTimeout(10000);
         let data = '';
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
@@ -96,26 +97,31 @@ function createAutoUpdater(options = {}) {
           catch { reject(new Error('Invalid JSON from GitHub API')); }
         });
       }).on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('GitHub API request timed out')); });
     });
   }
 
   function downloadFile(url, destPath) {
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(destPath);
-      https.get(url, { headers: buildHeaders() }, (res) => {
+      const req = https.get(url, { headers: buildHeaders(), timeout: 30000 }, (res) => {
         if (res.statusCode >= 400) {
           reject(new Error(`Download failed: ${res.statusCode}`));
           return;
         }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let received = 0;
+        res.on('data', chunk => { received += chunk.length; });
         res.pipe(file);
         file.on('finish', () => {
           file.close();
-          resolve(destPath);
+          resolve({ filePath: destPath, size: received, name: path.basename(destPath), bytesReceived: received, bytesTotal: total });
         });
       }).on('error', (err) => {
         fs.unlink(destPath, () => {});
         reject(err);
       });
+      req.on('timeout', () => { req.destroy(); fs.unlink(destPath, () => {}); reject(new Error('Download timed out')); });
     });
   }
 

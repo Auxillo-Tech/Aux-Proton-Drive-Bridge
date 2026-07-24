@@ -163,7 +163,7 @@ function createTray() {
   if (tray) return tray;
   const iconPath = path.join(__dirname, '..', '..', 'assets', 'icon.png');
   const image = nativeImage.createFromPath(iconPath);
-  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image.resize({ width: 16, height: 16 }));
+  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image.resize({ width: 24, height: 24 }));
   tray.setToolTip('Aux Proton Drive Bridge');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show Aux Proton Drive Bridge', click: showMainWindow },
@@ -258,11 +258,19 @@ ipcMain.handle('proton:downloadAll', async (_event, options = {}) => {
 });
 ipcMain.handle('proton:downloadPaths', async (_event, options = {}) => {
   const localFolder = options.localFolder || DEFAULT_LOCAL_FOLDER;
+  // Validate local path is within home
+  const resolved = path.resolve(localFolder);
+  if (!resolved.startsWith(os.homedir())) throw new Error('Download destination must be under home directory');
   fs.mkdirSync(localFolder, { recursive: true });
   const result = await recordOperation('downloadPaths', { ...options, localFolder }, (eventSink) => runProton('download', { ...options, localFolder }, eventSink));
   return { ok: true, operationId: result.operationId, localFolder, stdout: result.stdout, stderr: result.stderr };
 });
 ipcMain.handle('proton:uploadPaths', async (_event, options = {}) => {
+  // Validate all upload paths are within home
+  const localPaths = Array.isArray(options.localPaths) ? options.localPaths : [];
+  for (const p of localPaths) {
+    if (!path.resolve(p).startsWith(os.homedir())) throw new Error('Upload paths must be under home directory');
+  }
   const result = await recordOperation('uploadPaths', options, (eventSink) => runProton('upload', options, eventSink));
   return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
 });
@@ -361,5 +369,8 @@ app.on('before-quit', async () => {
     console.error('Shutdown error:', err);
   }
 });
-app.on('window-all-closed', () => { if (process.platform === 'darwin') return; });
+app.on('window-all-closed', () => {
+  isQuitting = false;
+  if (process.platform === 'darwin') return;
+});
 app.on('activate', () => { showMainWindow(); });

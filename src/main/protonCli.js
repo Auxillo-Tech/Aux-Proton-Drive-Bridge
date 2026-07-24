@@ -55,7 +55,29 @@ function parseListOutput(output) {
     });
 }
 
-let protonQueue = Promise.resolve();
+// Array-based serialized queue (fixed max size, no growing promise chain)
+const MAX_QUEUE_SIZE = 100;
+const protonQueue = [];
+
+function runProton(action, options = {}, eventSink) {
+  return new Promise((resolve, reject) => {
+    if (protonQueue.length >= MAX_QUEUE_SIZE) protonQueue.shift();
+    protonQueue.push({ action, options, eventSink, resolve, reject });
+    process.nextTick(drainQueue);
+  });
+}
+
+function drainQueue() {
+  if (drainQueue.running) return;
+  drainQueue.running = true;
+  function next() {
+    if (!protonQueue.length) { drainQueue.running = false; return; }
+    const job = protonQueue.shift();
+    runProtonNow(job.action, job.options, job.eventSink)
+      .then(job.resolve).catch(job.reject).finally(next);
+  }
+  next();
+}
 
 function runProtonNow(action, options = {}, eventSink) {
   const { bin, args } = buildCommand(action, options);
@@ -81,12 +103,6 @@ function runProtonNow(action, options = {}, eventSink) {
       }
     });
   });
-}
-
-function runProton(action, options = {}, eventSink) {
-  const job = protonQueue.catch(() => undefined).then(() => runProtonNow(action, options, eventSink));
-  protonQueue = job;
-  return job;
 }
 
 async function getStatus() {
