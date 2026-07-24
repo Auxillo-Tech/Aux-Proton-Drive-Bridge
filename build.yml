@@ -6,6 +6,7 @@ directories:
   buildResources: assets
 files:
   - src/**/*
+  - assets/**/*
   - package.json
   - README.md
 asar: true
