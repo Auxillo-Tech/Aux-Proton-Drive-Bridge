@@ -1,5 +1,5 @@
-appId: tech.auxillo.protonbridge
-productName: Aux Proton Bridge
+appId: tech.auxillo.auxprotondrivebridge
+productName: Aux Proton Drive Bridge
 artifactName: ${productName}-${version}-${arch}.${ext}
 directories:
   output: dist
@@ -16,7 +16,7 @@ linux:
     - deb
     - rpm
   category: Network
-  executableName: aux-proton-bridge
+  executableName: aux-proton-drive-bridge
   icon: assets/icon.png
 deb:
   depends:

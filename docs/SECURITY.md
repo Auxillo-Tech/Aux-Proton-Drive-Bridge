@@ -1,6 +1,6 @@
 # Security model
 
-Aux Proton Bridge is an unofficial desktop bridge over Proton's official `proton-drive` CLI.
+Aux Proton Drive Bridge is an unofficial desktop bridge over Proton's official `proton-drive` CLI.
 
 ## Credential handling
 

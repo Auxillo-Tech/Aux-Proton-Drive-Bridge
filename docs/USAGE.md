@@ -1,6 +1,6 @@
-# Use Aux Proton Bridge
+# Use Aux Proton Drive Bridge
 
-Aux Proton Bridge is a GUI for Proton Drive operations through Proton's official `proton-drive` CLI.
+Aux Proton Drive Bridge is a GUI for Proton Drive operations through Proton's official `proton-drive` CLI.
 
 ## What it is
 
@@ -30,7 +30,7 @@ It does not yet provide:
 
 ## Sign in
 
-1. Open Aux Proton Bridge.
+1. Open Aux Proton Drive Bridge.
 2. Click **Sign in**.
 3. Proton's CLI opens the Proton browser login flow.
 4. Complete login in the browser.
@@ -116,7 +116,7 @@ The app serializes operations it starts itself, but it cannot control separate t
 ## Safe workflow for first use
 
 1. Install Proton CLI.
-2. Sign in through Aux Proton Bridge.
+2. Sign in through Aux Proton Drive Bridge.
 3. Download one small folder first.
 4. Confirm local files look right.
 5. Then download larger folders.
@@ -140,7 +140,7 @@ For AppImage users, replace the old AppImage file with the new one.
 
 ## Uninstalling
 
-Uninstalling Aux Proton Bridge does not delete your Proton account or Proton Drive data.
+Uninstalling Aux Proton Drive Bridge does not delete your Proton account or Proton Drive data.
 
 It also should not delete files you downloaded locally unless you manually remove them.
 

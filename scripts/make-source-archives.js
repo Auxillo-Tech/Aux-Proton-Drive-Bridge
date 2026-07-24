@@ -6,7 +6,7 @@ const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
 fs.mkdirSync(dist, { recursive: true });
 const version = require(path.join(root, 'package.json')).version;
-const base = `aux-proton-bridge-${version}-source`;
+const base = `aux-proton-drive-bridge-${version}-source`;
 const tarPath = path.join(dist, `${base}.tar.gz`);
 const zipPath = path.join(dist, `${base}.zip`);
 const excludes = [

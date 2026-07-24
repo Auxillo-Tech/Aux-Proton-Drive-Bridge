@@ -37,13 +37,13 @@ function getJson(pathname) {
     for (let i = 0; i < 80; i++) {
       try {
         const pages = await getJson('/json');
-        page = pages.find(p => p.type === 'page' && String(p.title).includes('Aux Proton Bridge')) || pages.find(p => p.type === 'page') || pages[0] || null;
-        if (page && String(page.title).includes('Aux Proton Bridge')) break;
+        page = pages.find(p => p.type === 'page' && String(p.title).includes('Aux Proton Drive Bridge')) || pages.find(p => p.type === 'page') || pages[0] || null;
+        if (page && String(page.title).includes('Aux Proton Drive Bridge')) break;
       } catch {}
       await new Promise(r => setTimeout(r, 250));
     }
     if (!page) throw new Error('CDP page did not appear: ' + output.slice(-1000));
-    if (!String(page.title).includes('Aux Proton Bridge')) throw new Error(`Unexpected title: ${page.title}; url=${page.url}; logs=${output.slice(-1000)}`);
+    if (!String(page.title).includes('Aux Proton Drive Bridge')) throw new Error(`Unexpected title: ${page.title}; url=${page.url}; logs=${output.slice(-1000)}`);
     console.log('source smoke passed:', page.title);
   } finally {
     killTree(child.pid, 'SIGTERM');

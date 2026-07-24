@@ -21,4 +21,14 @@ const preload = fs.readFileSync(path.join(__dirname, '..', 'src/main/preload.js'
 for (const api of ['getDefaultLocalFolder', 'getStatus', 'listMyFiles', 'downloadAll', 'downloadPaths', 'uploadPaths', 'login', 'logout', 'getOperationHistory', 'clearOperationHistory', 'chooseBackupPaths', 'getBackupProfile', 'saveBackupProfile', 'runBackupProfile']) {
   if (!preload.includes(api)) throw new Error(`Preload API missing ${api}`);
 }
+// Check new modules exist
+const newModules = ['syncDb.js', 'transferQueue.js', 'progressParser.js', 'conflictStore.js', 'syncEngine.js', 'autoUpdater.js', 'fuseMount.js'];
+for (const mod of newModules) {
+  const p = path.join(__dirname, '..', 'src/main', mod);
+  if (!fs.existsSync(p)) throw new Error(`Missing new module: src/main/${mod}`);
+}
+// IPC handlers for new features
+for (const api of ['sync:getStats', 'transfer:enqueue', 'conflict:listActive', 'sync:start', 'update:check', 'fuse:mount']) {
+  if (!main.includes(api)) throw new Error(`IPC handler missing: ${api}`);
+}
 console.log('static checks passed');

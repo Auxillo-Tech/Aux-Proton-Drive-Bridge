@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aux Proton Bridge</title>
+  <title>Aux Proton Drive Bridge</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -12,7 +12,7 @@
     <header class="hero">
       <div>
         <p class="eyebrow">Auxillo Labs</p>
-        <h1>Aux Proton Bridge</h1>
+        <h1>Aux Proton Drive Bridge</h1>
         <p class="subtitle">Unofficial Linux desktop bridge powered by Proton's official Drive CLI.</p>
       </div>
       <div class="status-card">
@@ -21,56 +21,209 @@
           <strong id="statusText">Checking CLI…</strong>
           <small id="versionText">Waiting for status</small>
         </div>
+        <div class="sync-indicator" id="syncIndicator" title="Sync status">
+          <span id="syncIcon">⏸</span>
+          <small id="syncStatusText">Idle</small>
+        </div>
       </div>
     </header>
 
-    <section class="toolbar">
-      <button id="refreshBtn">Refresh files</button>
-      <button id="loginBtn">Sign in</button>
-      <button id="logoutBtn" class="secondary">Log out</button>
-      <button id="openFolderBtn" class="secondary">Open local folder</button>
-    </section>
+    <!-- Tab navigation -->
+    <nav class="tab-bar">
+      <button id="tabFiles" class="tab active">Files</button>
+      <button id="tabSync" class="tab">Sync</button>
+      <button id="tabConflicts" class="tab">Conflicts <span id="conflictBadge" class="badge-count hidden">0</span></button>
+      <button id="tabQueue" class="tab">Queue</button>
+      <button id="tabFuse" class="tab">FUSE Mount</button>
+      <button id="tabUpdates" class="tab">Updates</button>
+    </nav>
 
-    <section class="grid">
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Remote `/my-files`</h2>
-            <p>Select folders/files to download.</p>
-          </div>
-          <button id="downloadSelectedBtn">Download selected</button>
-        </div>
-        <div id="fileList" class="file-list empty">No files loaded yet.</div>
-      </article>
+    <!-- Tab: Files (original UI) -->
+    <section id="panelFiles" class="tab-panel active">
+      <section class="toolbar">
+        <button id="refreshBtn">Refresh files</button>
+        <button id="loginBtn">Sign in</button>
+        <button id="logoutBtn" class="secondary">Log out</button>
+        <button id="openFolderBtn" class="secondary">Open local folder</button>
+      </section>
 
-      <aside class="panel side">
-        <h2>Transfer controls</h2>
-        <label>Local folder
-          <div class="path-row">
-            <input id="localFolderInput" value="" />
-            <button id="chooseFolderBtn" class="secondary">Choose</button>
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Remote `/my-files`</h2>
+              <p>Select folders/files to download.</p>
+            </div>
+            <button id="downloadSelectedBtn">Download selected</button>
           </div>
-        </label>
-        <button id="downloadAllBtn" class="wide">Download everything</button>
-        <button id="uploadBtn" class="wide secondary">Upload files/folders</button>
-        <div class="backup-box">
-          <h3>One-way backup profile</h3>
-          <label class="check-row"><input id="backupEnabledInput" type="checkbox" /> Enable profile</label>
-          <label>Remote backup folder
-            <input id="backupRemoteInput" value="/my-files" />
+          <div id="fileList" class="file-list empty">No files loaded yet.</div>
+        </article>
+
+        <aside class="panel side">
+          <h2>Transfer controls</h2>
+          <label>Local folder
+            <div class="path-row">
+              <input id="localFolderInput" value="" />
+              <button id="chooseFolderBtn" class="secondary">Choose</button>
+            </div>
           </label>
-          <button id="chooseBackupPathsBtn" class="wide secondary">Choose backup paths</button>
-          <div id="backupPathList" class="mini-list empty">No backup paths selected.</div>
-          <button id="saveBackupProfileBtn" class="wide secondary">Save backup profile</button>
-          <button id="runBackupProfileBtn" class="wide">Run backup now</button>
-          <p class="mini-note">Conservative mode: uploads only, skips existing files, merges folders, never propagates deletes.</p>
-        </div>
-        <div class="note">
-          <strong>Safe defaults:</strong> downloads merge folders and skip existing files. Proton credentials stay in the Proton CLI/OS secret store.
-        </div>
-      </aside>
+          <button id="downloadAllBtn" class="wide">Download everything</button>
+          <button id="uploadBtn" class="wide secondary">Upload files/folders</button>
+          <div class="backup-box">
+            <h3>One-way backup profile</h3>
+            <label class="check-row"><input id="backupEnabledInput" type="checkbox" /> Enable profile</label>
+            <label>Remote backup folder
+              <input id="backupRemoteInput" value="/my-files" />
+            </label>
+            <button id="chooseBackupPathsBtn" class="wide secondary">Choose backup paths</button>
+            <div id="backupPathList" class="mini-list empty">No backup paths selected.</div>
+            <button id="saveBackupProfileBtn" class="wide secondary">Save backup profile</button>
+            <button id="runBackupProfileBtn" class="wide">Run backup now</button>
+            <p class="mini-note">Conservative mode: uploads only, skips existing files, merges folders, never propagates deletes.</p>
+          </div>
+          <div class="note">
+            <strong>Safe defaults:</strong> downloads merge folders and skip existing files. Proton credentials stay in the Proton CLI/OS secret store.
+          </div>
+        </aside>
+      </section>
     </section>
 
+    <!-- Tab: Sync Dashboard -->
+    <section id="panelSync" class="tab-panel">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Sync Engine</h2>
+          <div class="sync-controls">
+            <button id="syncStartBtn" class="secondary">Start sync</button>
+            <button id="syncStopBtn" class="secondary">Stop</button>
+            <button id="syncScanNowBtn">Scan now</button>
+          </div>
+        </div>
+        <div class="sync-mode-selector">
+          <label>Sync mode:
+            <select id="syncModeSelect">
+              <option value="conservative">Conservative (upload only, skip existing)</option>
+              <option value="one-way-upload">One-way upload (local → remote)</option>
+              <option value="one-way-download">One-way download (remote → local)</option>
+              <option value="bidirectional">Bidirectional (two-way sync)</option>
+            </select>
+          </label>
+          <label>Poll interval:
+            <select id="pollIntervalSelect">
+              <option value="30000">30 seconds</option>
+              <option value="60000" selected>1 minute</option>
+              <option value="300000">5 minutes</option>
+              <option value="900000">15 minutes</option>
+            </select>
+          </label>
+        </div>
+        <div class="sync-stats-grid">
+          <div class="stat-card"><strong id="syncSynced">0</strong><small>Synced</small></div>
+          <div class="stat-card"><strong id="syncPending">0</strong><small>Pending</small></div>
+          <div class="stat-card warn"><strong id="syncConflicts">0</strong><small>Conflicts</small></div>
+          <div class="stat-card"><strong id="syncTotal">0</strong><small>Tracked</small></div>
+          <div class="stat-card"><strong id="syncEvents">0</strong><small>Events</small></div>
+          <div class="stat-card"><strong id="syncDbSize">—</strong><small>DB Size</small></div>
+        </div>
+        <div class="sync-mode-warn">
+          ⚠ Bidirectional sync is experimental. Start with Conservative mode and verify behavior.
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top:14px">
+        <div class="panel-head">
+          <h2>Pending sync items</h2>
+          <button id="syncRefreshBtn" class="secondary">Refresh</button>
+        </div>
+        <div id="syncPendingList" class="file-list empty">No items pending sync.</div>
+      </section>
+    </section>
+
+    <!-- Tab: Conflicts -->
+    <section id="panelConflicts" class="tab-panel">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Conflict resolution</h2>
+          <button id="conflictRefreshBtn" class="secondary">Refresh</button>
+        </div>
+        <div id="conflictStats" class="conflict-stats"></div>
+        <div id="conflictList" class="file-list empty">No conflicts detected.</div>
+        <div class="conflict-legend">
+          <strong>Resolution strategies:</strong><br/>
+          <code>keep_local</code> — Upload local version, overwriting remote<br/>
+          <code>keep_remote</code> — Download remote version, overwriting local<br/>
+          <code>keep_both</code> — Rename both sides with conflict suffix<br/>
+          <code>skip</code> — Leave both sides as-is
+        </div>
+      </section>
+    </section>
+
+    <!-- Tab: Transfer Queue -->
+    <section id="panelQueue" class="tab-panel">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Transfer Queue</h2>
+          <div class="queue-controls">
+            <button id="queuePauseBtn" class="secondary">Pause</button>
+            <button id="queueResumeBtn" class="secondary">Resume</button>
+            <button id="queueCancelAllBtn" class="secondary">Cancel all</button>
+          </div>
+        </div>
+        <div id="queueActive" class="file-list empty">No active transfers.</div>
+        <h3>Pending</h3>
+        <div id="queuePending" class="file-list empty">No pending transfers.</div>
+        <h3>Recent completed</h3>
+        <div id="queueCompleted" class="file-list empty">No completed transfers yet.</div>
+      </section>
+    </section>
+
+    <!-- Tab: FUSE Mount -->
+    <section id="panelFuse" class="tab-panel">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Proton Drive FUSE Mount</h2>
+        </div>
+        <div id="fuseStatus" class="fuse-status-card">
+          <div class="fuse-status-indicator">
+            <span id="fuseStateDot" class="dot"></span>
+            <strong id="fuseStateText">Checking…</strong>
+          </div>
+          <div class="fuse-detail">
+            <p><strong>Mount point:</strong> <code id="fuseMountPoint">~/ProtonDrive-FUSE</code></p>
+            <p id="fuseError" class="error-text hidden"></p>
+          </div>
+        </div>
+        <div class="fuse-controls">
+          <button id="fuseMountBtn" class="wide">Mount</button>
+          <button id="fuseUnmountBtn" class="wide secondary">Unmount</button>
+          <button id="fuseRefreshBtn" class="wide secondary">Refresh status</button>
+        </div>
+        <div class="note" style="margin-top:14px">
+          <strong>Note:</strong> FUSE support requires the proton-drive CLI to have mount capabilities, or a compatible FUSE wrapper. Requires <code>/dev/fuse</code> and <code>fusermount3</code> installed.
+        </div>
+      </section>
+    </section>
+
+    <!-- Tab: Updates -->
+    <section id="panelUpdates" class="tab-panel">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Software Updates</h2>
+          <button id="updateCheckBtn">Check for updates</button>
+        </div>
+        <div id="updateStatus" class="update-status">
+          <p id="updateCurrentVersion">Current version: <strong>0.3.0</strong></p>
+          <div id="updateResult" class="hidden"></div>
+        </div>
+        <div id="updateProgress" class="hidden">
+          <p>Downloading update…</p>
+        </div>
+        <button id="updateDownloadBtn" class="wide hidden">Download update</button>
+        <button id="updateApplyBtn" class="wide secondary hidden">Apply update</button>
+      </section>
+    </section>
+
+    <!-- Shared bottom panels -->
     <section class="panel history-panel">
       <div class="panel-head">
         <div>
