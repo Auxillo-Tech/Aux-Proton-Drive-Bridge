@@ -190,10 +190,10 @@ function startScheduler() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 920,
-    minHeight: 620,
+    width: 1400,
+    height: 920,
+    minWidth: 1000,
+    minHeight: 700,
     title: 'Aux Proton Drive Bridge',
     backgroundColor: '#090b10',
     webPreferences: {
