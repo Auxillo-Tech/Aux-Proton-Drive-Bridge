@@ -340,12 +340,26 @@ app.whenReady().then(() => {
   // Start periodic update checks
   getAutoUpdater().startPeriodicCheck();
 });
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
   isQuitting = true;
-  // Clean shutdown of sync engine and FUSE mount
-  if (syncEngine) syncEngine.stop();
-  if (fuseMount) fuseMount.destroy().catch(() => {});
-  if (syncDb) syncDb.close();
+  try {
+    // Stop timers
+    if (schedulerTimer) { clearInterval(schedulerTimer); schedulerTimer = null; }
+    // Cancel all transfers
+    if (transferQueue) transferQueue.destroy();
+    // Stop sync engine
+    if (syncEngine) { try { syncEngine.stop(); } catch {} }
+    // Unmount FUSE
+    if (fuseMount) { try { await fuseMount.destroy(); } catch {} }
+    // Destroy tray
+    if (tray) { tray.destroy(); tray = null; }
+    // Stop auto-updater
+    if (autoUpdater) autoUpdater.stopPeriodicCheck();
+    // Close sync DB last
+    if (syncDb) { try { syncDb.close(); } catch {} }
+  } catch (err) {
+    console.error('Shutdown error:', err);
+  }
 });
 app.on('window-all-closed', () => { if (process.platform === 'darwin') return; });
 app.on('activate', () => { showMainWindow(); });
