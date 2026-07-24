@@ -1,0 +1,58 @@
+{
+  "id": "tech.auxillo.auxprotondrivebridge",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "24.08",
+  "sdk": "org.freedesktop.Sdk",
+  "base": "org.electronjs.Electron2.BaseApp",
+  "base-version": "24.08",
+  "command": "aux-proton-drive-bridge",
+  "separate-locales": false,
+  "finish-args": [
+    "--share=ipc",
+    "--socket=x11",
+    "--socket=wayland",
+    "--share=network",
+    "--device=dri",
+    "--filesystem=home",
+    "--talk-name=org.freedesktop.secrets",
+    "--talk-name=org.kde.kwalletd5",
+    "--talk-name=org.kde.kwalletd6",
+    "--env=PROTON_DRIVE_BIN=proton-drive"
+  ],
+  "modules": [
+    {
+      "name": "proton-drive-cli",
+      "buildsystem": "simple",
+      "build-commands": [
+        "install -Dm755 proton-drive /app/bin/proton-drive"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "only-arches": ["x86_64"],
+          "url": "https://github.com/ProtonVPN/linux-cli/releases/latest/download/proton-drive",
+          "sha256": "SKIP"
+        }
+      ]
+    },
+    {
+      "name": "aux-proton-drive-bridge",
+      "buildsystem": "simple",
+      "build-commands": [
+        "tar xzf aux-proton-drive-bridge-source.tar.gz",
+        "cd aux-proton-drive-bridge",
+        "npm ci --omit=dev",
+        "npx electron-builder --linux rpm --config build.yml",
+        "install -Dm755 dist/linux-unpacked/aux-proton-drive-bridge /app/bin/aux-proton-drive-bridge",
+        "install -Dm644 dist/linux-unpacked/resources/app.asar /app/aux-proton-drive-bridge/resources/app.asar",
+        "cp -r dist/linux-unpacked/resources /app/aux-proton-drive-bridge/"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "path": "../dist/aux-proton-drive-bridge-0.3.0-source.tar.gz"
+        }
+      ]
+    }
+  ]
+}
