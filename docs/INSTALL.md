@@ -25,9 +25,9 @@ Release page:
 - A Proton account
 - Browser access for Proton login
 - Working secret/keyring provider supported by Proton CLI:
-  - KDE: KWallet
-  - GNOME/Cinnamon/etc.: GNOME Keyring/libsecret
-  - other/headless: `pass`, if supported by the CLI
+ KDE: KWallet
+ GNOME/Cinnamon/etc.: GNOME Keyring/libsecret
+ other/headless: `pass`, if supported by the CLI
 
 Check Proton CLI:
 
@@ -72,13 +72,13 @@ Download:
 Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
 ```
 
-Option A — graphical install:
+Option A - graphical install:
 
 1. Double-click the `.deb` file.
 2. Install with the distro's Software app/package installer.
 3. Launch **Aux Proton Drive Bridge** from the application menu.
 
-Option B — terminal install:
+Option B - terminal install:
 
 ```bash
 sudo apt install ./Aux.Proton.Drive.Bridge-0.3.0-amd64.deb

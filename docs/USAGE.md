@@ -28,9 +28,9 @@ The app is organized into tabs:
 | Tab | Purpose |
 |---|---|
 | **Files** | Manual file listing, download, upload, backup profile |
-| **Sync** | Sync engine — start/stop, mode selection, pending items |
+| **Sync** | Sync engine - start/stop, mode selection, pending items |
 | **Conflicts** | Conflict detection and resolution |
-| **Queue** | Live transfer queue — active, pending, completed transfers |
+| **Queue** | Live transfer queue - active, pending, completed transfers |
 | **FUSE Mount** | Mount Proton Drive as a filesystem directory |
 | **Updates** | Check for and download software updates |
 
@@ -112,7 +112,7 @@ The **Sync** tab lets you start the background sync engine.
 | **Conservative** (default) | Upload only, skip existing files, merge folders. Safest for first use. |
 | **One-way upload** | Local changes → Remote. Does not download. |
 | **One-way download** | Remote changes → Local. Does not upload. |
-| **Bidirectional** | Full two-way sync. Experimental — start with Conservative mode first. |
+| **Bidirectional** | Full two-way sync. Experimental - start with Conservative mode first. |
 
 ### How to use
 
@@ -130,9 +130,9 @@ The **Sync** tab lets you start the background sync engine.
 
 The **Queue** tab shows the current state of all transfers:
 
-- **Active** — Currently running transfers
-- **Pending** — Queued transfers waiting to start
-- **Recent completed** — Recently finished or failed transfers
+- **Active** - Currently running transfers
+- **Pending** - Queued transfers waiting to start
+- **Recent completed** - Recently finished or failed transfers
 
 You can **pause**, **resume**, or **cancel** transfers from this tab.
 

@@ -10,23 +10,23 @@ Puente de escritorio Linux no oficial para Proton Drive que utiliza la CLI ofici
 
 ## Estado
 
-Versión **`0.3.0`** — Sincronización completa, cola de transferencia, resolución de conflictos y soporte de montaje FUSE.
+Versión **`0.3.0`** - Sincronización completa, cola de transferencia, resolución de conflictos y soporte de montaje FUSE.
 
 Aux Proton Drive Bridge brinda a los usuarios de Linux una interfaz gráfica para operaciones de Proton Drive a través de la CLI oficial de Proton.
 
 ## Características principales
 
-- **Base de datos de metadatos de sincronización** — Seguimiento basado en SQLite del estado local y remoto de cada archivo rastreado
-- **Cola de transferencia en vivo** — Transferencias simultáneas con prioridad, pausa/reanudación, cancelación, reintento
-- **Analizador de progreso** — Análisis en tiempo real de la salida de la CLI de proton-drive para el progreso de transferencias
-- **Detección y resolución de conflictos** — Detecta LOCAL_REMOTE_MODIFY, LOCAL_DELETE_REMOTE_MODIFY, TYPE_MISMATCH, HASH_MISMATCH con estrategias de resolución
-- **Motor de sincronización bidireccional** — Vigilancia del sistema de archivos local mediante fs.watch + sondeo remoto mediante CLI
-- **Modos de sincronización** — Conservador (solo subida, saltar existentes), Subida unidireccional, Descarga unidireccional, Bidireccional
-- **Actualizador automático** — Verificación y descarga de actualizaciones basada en GitHub Releases
-- **Firmado de versiones** — Scripts de firma GPG y signify/minisign
-- **Integración con el administrador de archivos** — Scripts de menú contextual para Nautilus, Dolphin, Thunar
-- **Montaje FUSE opcional** — Monta Proton Drive como un directorio del sistema de archivos
-- **Interfaz con pestañas** — Pestañas separadas para Archivos, Panel de Sincronización, Conflictos, Cola, FUSE y Actualizaciones
+- **Base de datos de metadatos de sincronización** - Seguimiento basado en SQLite del estado local y remoto de cada archivo rastreado
+- **Cola de transferencia en vivo** - Transferencias simultáneas con prioridad, pausa/reanudación, cancelación, reintento
+- **Analizador de progreso** - Análisis en tiempo real de la salida de la CLI de proton-drive para el progreso de transferencias
+- **Detección y resolución de conflictos** - Detecta LOCAL_REMOTE_MODIFY, LOCAL_DELETE_REMOTE_MODIFY, TYPE_MISMATCH, HASH_MISMATCH con estrategias de resolución
+- **Motor de sincronización bidireccional** - Vigilancia del sistema de archivos local mediante fs.watch + sondeo remoto mediante CLI
+- **Modos de sincronización** - Conservador (solo subida, saltar existentes), Subida unidireccional, Descarga unidireccional, Bidireccional
+- **Actualizador automático** - Verificación y descarga de actualizaciones basada en GitHub Releases
+- **Firmado de versiones** - Scripts de firma GPG y signify/minisign
+- **Integración con el administrador de archivos** - Scripts de menú contextual para Nautilus, Dolphin, Thunar
+- **Montaje FUSE opcional** - Monta Proton Drive como un directorio del sistema de archivos
+- **Interfaz con pestañas** - Pestañas separadas para Archivos, Panel de Sincronización, Conflictos, Cola, FUSE y Actualizaciones
 
 ## Instalación rápida
 
@@ -62,7 +62,7 @@ Instalar con el instalador de paquetes gráfico, `dnf`, `zypper` o `rpm`.
 
 ## Modelo de seguridad
 
-Aux Proton Drive Bridge nunca solicita su contraseña de Proton. La autenticación se delega al flujo oficial CLI/navegador de Proton — las credenciales no se almacenan en la aplicación.
+Aux Proton Drive Bridge nunca solicita su contraseña de Proton. La autenticación se delega al flujo oficial CLI/navegador de Proton - las credenciales no se almacenan en la aplicación.
 
 ---
 
