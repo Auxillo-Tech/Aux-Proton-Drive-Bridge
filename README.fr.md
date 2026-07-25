@@ -1,4 +1,4 @@
-🌐 [English](README.md) · [Deutsch](README.de.md) · [简体中文](README.zh.md) · [Italiano](README.it.md) · [Español](README.es.md) · **Français** · [日本語](README.ja.md) · [Português](README.pt.md)
+🌐 [English](README.md) · [Deutsch](README.de.md) · [简体中文](README.zh.md) · [Italiano](README.it.md) · [Español](README.es.md) · **Français** · [日本語](README.ja.md) · [Português](README.pt.md) · [Русский](README.ru.md)
 
 ---
 
