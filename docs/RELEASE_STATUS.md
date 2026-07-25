@@ -1,6 +1,6 @@
 # Release status
 
-Status: **v0.3.0** — Full-featured sync, transfer queue, conflict resolution, FUSE mount, and auto-update.
+Status: **v0.3.0** - Full-featured sync, transfer queue, conflict resolution, FUSE mount, and auto-update.
 
 ## v0.3.0
 
@@ -9,8 +9,8 @@ GitHub release: <https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/release
 
 ## Verified gates
 
-- Source tests/static checks: `npm run check` — passed
-- Dependency audit: `npm audit --json` — 0 vulnerabilities (verified)
+- Source tests/static checks: `npm run check` - passed
+- Dependency audit: `npm audit --json` - 0 vulnerabilities (verified)
 
 ## New in v0.3.0
 

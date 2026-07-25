@@ -10,23 +10,23 @@
 
 ## 状态
 
-版本 **`0.3.0`** — 功能完整的同步、传输队列、冲突解决和 FUSE 挂载支持。
+版本 **`0.3.0`** - 功能完整的同步、传输队列、冲突解决和 FUSE 挂载支持。
 
 Aux Proton Drive Bridge 通过 Proton 官方 CLI 为 Linux 用户提供 Proton Drive 操作的图形界面。
 
 ## 主要功能
 
-- **同步元数据库** — 基于 SQLite 跟踪每个受控文件的本地和远程状态
-- **实时传输队列** — 支持优先级、暂停/恢复、取消、重试的并发传输
-- **进度解析器** — 实时解析 proton-drive CLI 输出以获取传输进度
-- **冲突检测与解决** — 检测 LOCAL_REMOTE_MODIFY、LOCAL_DELETE_REMOTE_MODIFY、TYPE_MISMATCH、HASH_MISMATCH 并提��解决策略
-- **双向同步引擎** — 通过 fs.watch 监控本地文件系统 + 通过 CLI 远程轮询
-- **同步模式** — 保守模式（仅上传，跳过已有文件）、单向上传、单向下载、双向同步
-- **自动更新** — 基于 GitHub Releases 的更新检查和下载
-- **发布签名** — GPG 和 signify/minisign 签名脚本
-- **文件管理器集成** — Nautilus、Dolphin、Thunar 上下文菜单脚本
-- **可选 FUSE 挂载** — 将 Proton Drive 挂载为文件系统目录
-- **标签页界面** — 文件、同步面板、冲突、队列、FUSE 和更新分别使用独立标签页
+- **同步元数据库** - 基于 SQLite 跟踪每个受控文件的本地和远程状态
+- **实时传输队列** - 支持优先级、暂停/恢复、取消、重试的并发传输
+- **进度解析器** - 实时解析 proton-drive CLI 输出以获取传输进度
+- **冲突检测与解决** - 检测 LOCAL_REMOTE_MODIFY、LOCAL_DELETE_REMOTE_MODIFY、TYPE_MISMATCH、HASH_MISMATCH 并提��解决策略
+- **双向同步引擎** - 通过 fs.watch 监控本地文件系统 + 通过 CLI 远程轮询
+- **同步模式** - 保守模式（仅上传，跳过已有文件）、单向上传、单向下载、双向同步
+- **自动更新** - 基于 GitHub Releases 的更新检查和下载
+- **发布签名** - GPG 和 signify/minisign 签名脚本
+- **文件管理器集成** - Nautilus、Dolphin、Thunar 上下文菜单脚本
+- **可选 FUSE 挂载** - 将 Proton Drive 挂载为文件系统目录
+- **标签页界面** - 文件、同步面板、冲突、队列、FUSE 和更新分别使用独立标签页
 
 ## 快速安装
 
@@ -62,7 +62,7 @@ Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
 
 ## 安全模型
 
-Aux Proton Drive Bridge 从不询问您的 Proton 密码。身份验证委托给官方的 Proton CLI/浏览器流程——凭据不会存储在应用程序中。
+Aux Proton Drive Bridge 从不询问您的 Proton 密码。身份验证委托给官方的 Proton CLI/浏览器流程 凭据不会存储在应用程序中。
 
 ---
 

@@ -8,7 +8,7 @@ Unofficial Linux desktop bridge for Proton Drive using Proton's official `proton
 
 ## Status
 
-Version **`0.3.0`** — Full-featured sync, transfer queue, conflict resolution, and FUSE mount support.
+Version **`0.3.0`** - Full-featured sync, transfer queue, conflict resolution, and FUSE mount support.
 
 Aux Proton Drive Bridge gives Linux users a GUI for Proton Drive operations through Proton's official CLI. Now with persistent sync metadata tracking, bidirectional sync engine, live transfer queue, conflict management, auto-updates, and optional FUSE mount.
 
@@ -32,21 +32,21 @@ Release assets include:
 
 ## What works now
 
-### v0.3.0 — New features
+### v0.3.0 - New features
 
-- **Sync metadata DB** — SQLite-backed tracking of every tracked file's local and remote state
-- **Live transfer queue** — Concurrent transfers with priority, pause/resume, cancel, retry
-- **Progress parser** — Real-time parsing of proton-drive CLI output for transfer progress
-- **Conflict detection & resolution** — Detects LOCAL_REMOTE_MODIFY, LOCAL_DELETE_REMOTE_MODIFY, TYPE_MISMATCH, HASH_MISMATCH conflicts with resolution strategies
-- **Bidirectional sync engine** — Local filesystem watching via fs.watch + remote polling via CLI
-- **Sync modes** — Conservative (upload-only, skip existing), One-way upload, One-way download, Bidirectional
-- **Auto-updater** — GitHub Releases-based update checking and download
-- **Release signing** — GPG and signify/minisign signing scripts
-- **File manager integration** — Nautilus, Dolphin, Thunar context menu scripts
-- **Optional FUSE mount** — Mount Proton Drive as a filesystem directory
-- **Tabbed UI** — Separate tabs for Files, Sync Dashboard, Conflicts, Queue, FUSE, and Updates
+- **Sync metadata DB** - SQLite-backed tracking of every tracked file's local and remote state
+- **Live transfer queue** - Concurrent transfers with priority, pause/resume, cancel, retry
+- **Progress parser** - Real-time parsing of proton-drive CLI output for transfer progress
+- **Conflict detection & resolution** - Detects LOCAL_REMOTE_MODIFY, LOCAL_DELETE_REMOTE_MODIFY, TYPE_MISMATCH, HASH_MISMATCH conflicts with resolution strategies
+- **Bidirectional sync engine** - Local filesystem watching via fs.watch + remote polling via CLI
+- **Sync modes** - Conservative (upload-only, skip existing), One-way upload, One-way download, Bidirectional
+- **Auto-updater** - GitHub Releases-based update checking and download
+- **Release signing** - GPG and signify/minisign signing scripts
+- **File manager integration** - Nautilus, Dolphin, Thunar context menu scripts
+- **Optional FUSE mount** - Mount Proton Drive as a filesystem directory
+- **Tabbed UI** - Separate tabs for Files, Sync Dashboard, Conflicts, Queue, FUSE, and Updates
 
-### v0.2.x — Existing features
+### v0.2.x - Existing features
 
 - Detects the installed Proton Drive CLI
 - Opens Proton browser login via `proton-drive auth login`
@@ -132,11 +132,11 @@ See full usage guide: [`docs/USAGE.md`](docs/USAGE.md).
 
 ## Documentation
 
-- [`docs/INSTALL.md`](docs/INSTALL.md) — install instructions by distro family
-- [`docs/USAGE.md`](docs/USAGE.md) — sign-in, list, download, upload, sync, workflow
-- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — common Linux/CLI/keyring problems
-- [`docs/SECURITY.md`](docs/SECURITY.md) — credential handling and app security model
-- [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) — current release state and limitations
+- [`docs/INSTALL.md`](docs/INSTALL.md) - install instructions by distro family
+- [`docs/USAGE.md`](docs/USAGE.md) - sign-in, list, download, upload, sync, workflow
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) - common Linux/CLI/keyring problems
+- [`docs/SECURITY.md`](docs/SECURITY.md) - credential handling and app security model
+- [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) - current release state and limitations
 
 ## Build from source
 
@@ -190,8 +190,8 @@ All items from the v0.2.x roadmap are now implemented:
 
 ### Future
 
-- AUR packaging — PKGBUILD available in `dist/aur/`
-- Flatpak packaging — manifest available in `dist/flatpak/`
+- AUR packaging - PKGBUILD available in `dist/aur/`
+- Flatpak packaging - manifest available in `dist/flatpak/`
 - Wider distro qualification
 - Desktop notifications for all events
 - Advanced conflict diff viewer with content comparison

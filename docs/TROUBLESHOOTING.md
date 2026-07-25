@@ -160,14 +160,14 @@ Check:
 
 Click **Scan now** to trigger an immediate sync cycle.
 
-## Conflicts detected — what now?
+## Conflicts detected - what now?
 
 Go to the **Conflicts** tab to see all detected conflicts. For each conflict, choose a resolution strategy:
 
-- **keep_local** — Upload your local version to Proton Drive
-- **keep_remote** — Download the remote version from Proton Drive
-- **keep_both** — Rename both versions with a conflict suffix
-- **skip** — Leave both sides unchanged
+- **keep_local** - Upload your local version to Proton Drive
+- **keep_remote** - Download the remote version from Proton Drive
+- **keep_both** - Rename both versions with a conflict suffix
+- **skip** - Leave both sides unchanged
 
 ## Updates tab shows "Offline"
 
