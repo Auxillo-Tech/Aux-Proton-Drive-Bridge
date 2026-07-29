@@ -2,6 +2,12 @@
 
 # Aux Proton Drive Bridge
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux%20x86__64-black.svg)](#)
+[![Release](https://img.shields.io/github/v/release/Auxillo-Tech/Aux-Proton-Drive-Bridge?include_prereleases)](https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/auxillo)
+
+
 Unofficial Linux desktop bridge for Proton Drive using Proton's official `proton-drive` CLI.
 
 > Not affiliated with, endorsed by, or sponsored by Proton AG.
@@ -16,7 +22,7 @@ Aux Proton Drive Bridge gives Linux users a GUI for Proton Drive operations thro
 
 GitHub release:
 
-<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/latest>
+<https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest>
 
 Release assets include:
 
@@ -27,8 +33,6 @@ Release assets include:
 - `SHA256SUMS.txt`
 - `release-manifest.json`
 - required Ed25519 signature (`SHA256SUMS.txt.sig`)
-
-> Current repository visibility may be private until Auxillo chooses to make it public.
 
 ## What works now
 
