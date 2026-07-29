@@ -4,9 +4,7 @@ Aux Proton Drive Bridge is distributed as Linux release artifacts from GitHub Re
 
 Release page:
 
-<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/latest>
-
-> The repository/release may be private until Auxillo changes repository visibility to public.
+<https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest>
 
 ## Supported targets for v0.3.1
 
@@ -207,8 +205,8 @@ Requirements:
 - Proton Drive CLI
 
 ```bash
-git clone https://github.com/Auxillo-Tech/Aux-proton-drive-bridge.git
-cd Aux-proton-drive-bridge
+git clone https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge.git
+cd Aux-Proton-Drive-Bridge
 npm ci
 npm run check
 npm start

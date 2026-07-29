@@ -31,7 +31,7 @@ Aux Proton Drive Bridge is an unofficial desktop bridge over Proton's official `
 
 ## Update mechanism
 
-- Update checks use GitHub's Releases API over HTTPS. Authentication is optional for private repositories or higher API limits.
+- Update checks use the public GitHub Releases API over HTTPS for `Auxillo-Tech/Aux-Proton-Drive-Bridge`.
 - No update is downloaded or installed without explicit user action.
 - Downloaded updates are saved to the app's user data directory.
 - The updater rejects HTTPS downgrades, oversized responses, unsafe asset names, checksum mismatches, unsigned checksum manifests, and invalid Ed25519 signatures.

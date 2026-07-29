@@ -15,7 +15,7 @@ const licensePath = path.join(root, 'LICENSE');
 if (!fs.existsSync(appImagePath)) throw new Error(`Missing AppImage: ${appImagePath}`);
 const checksum = crypto.createHash('sha256').update(fs.readFileSync(appImagePath)).digest('hex');
 const licenseChecksum = crypto.createHash('sha256').update(fs.readFileSync(licensePath)).digest('hex');
-const sourceUrl = `https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/download/v${version}/${appImageName}`;
+const sourceUrl = `https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/download/v${version}/${appImageName}`;
 
 const pkgbuild = `# Maintainer: Auxillo <support@auxillo.tech>
 pkgname=aux-proton-drive-bridge-bin
@@ -23,7 +23,7 @@ pkgver=${version}
 pkgrel=1
 pkgdesc="Unofficial Linux desktop bridge for Proton Drive using the official Proton Drive CLI"
 arch=('x86_64')
-url="https://github.com/Auxillo-Tech/Aux-proton-drive-bridge"
+url="https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge"
 license=('MIT')
 depends=('proton-drive-cli' 'libsecret' 'xdg-utils')
 provides=('aux-proton-drive-bridge')
@@ -64,7 +64,7 @@ const srcinfo = `pkgbase = aux-proton-drive-bridge-bin
 \tpkgdesc = Unofficial Linux desktop bridge for Proton Drive using the official Proton Drive CLI
 \tpkgver = ${version}
 \tpkgrel = 1
-\turl = https://github.com/Auxillo-Tech/Aux-proton-drive-bridge
+\turl = https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge
 \tarch = x86_64
 \tlicense = MIT
 \tdepends = proton-drive-cli

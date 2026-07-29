@@ -171,7 +171,7 @@ Go to the **Conflicts** tab to see all detected conflicts. For each conflict, ch
 
 ## Updates tab shows "Offline"
 
-The app couldn't reach GitHub's API. Check your internet connection and try again. The app uses an authenticated GitHub API call (via your `gh` CLI token) to check for updates from the private repository.
+The app couldn't reach GitHub's API. Check your internet connection and try again. Update checks use the public GitHub Releases API for `Auxillo-Tech/Aux-Proton-Drive-Bridge` over HTTPS.
 
 ## How to report a bug
 

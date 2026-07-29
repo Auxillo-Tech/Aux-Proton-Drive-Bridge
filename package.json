@@ -2,7 +2,14 @@
   "name": "aux-proton-drive-bridge",
   "version": "0.3.1",
   "description": "Unofficial Linux desktop bridge for Proton Drive using the official Proton Drive CLI.",
-  "homepage": "https://github.com/Auxillo-Tech/Aux-proton-drive-bridge",
+  "homepage": "https://auxillo.tech",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/issues"
+  },
   "desktopName": "aux-proton-drive-bridge.desktop",
   "main": "src/main/main.js",
   "license": "MIT",
@@ -10,7 +17,7 @@
     "name": "Auxillo",
     "email": "support@auxillo.tech"
   },
-  "private": true,
+  "private": false,
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
