@@ -52,12 +52,15 @@ const se = createSyncEngine({ syncDb, transferQueue: tq, conflictStore: cs });
 console.log('   ✓ syncEngine created');
 console.log(`   modes: ${Object.values(SYNC_MODES).join(', ')}`);
 se.stop(); // ensure clean
+se.destroy();
 
 // 6. Auto-updater
 console.log('\n6. Loading autoUpdater…');
 const { createAutoUpdater } = require(path.join(root, 'src/main/autoUpdater'));
-const au = createAutoUpdater({ currentVersion: '0.3.0' });
-console.log(`   ✓ autoUpdater created (version ${au.parseVersion('0.3.0').major}.${au.parseVersion('0.3.0').minor}.${au.parseVersion('0.3.0').patch})`);
+const packageVersion = require(path.join(root, 'package.json')).version;
+const au = createAutoUpdater({ currentVersion: packageVersion });
+const parsedVersion = au.parseVersion(packageVersion);
+console.log(`   ✓ autoUpdater created (version ${parsedVersion.major}.${parsedVersion.minor}.${parsedVersion.patch})`);
 
 // 7. FUSE mount
 console.log('\n7. Loading fuseMount…');

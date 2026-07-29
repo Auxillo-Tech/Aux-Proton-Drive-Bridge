@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('auxProtonDriveBridge', {
   // Core
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   getDefaultLocalFolder: () => ipcRenderer.invoke('proton:getDefaultLocalFolder'),
   getStatus: () => ipcRenderer.invoke('proton:getStatus'),
   listMyFiles: () => ipcRenderer.invoke('proton:listMyFiles'),
@@ -101,6 +102,11 @@ contextBridge.exposeInMainWorld('auxProtonDriveBridge', {
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on('proton:transferError', handler);
     return () => ipcRenderer.removeListener('proton:transferError', handler);
+  },
+  onExternalDownloadFolder: (callback) => {
+    const handler = (_event, payload) => callback({ localFolder: payload?.localFolder });
+    ipcRenderer.on('proton:externalDownloadFolder', handler);
+    return () => ipcRenderer.removeListener('proton:externalDownloadFolder', handler);
   },
   onLocalChange: (callback) => {
     const handler = (_event, payload) => callback(payload);

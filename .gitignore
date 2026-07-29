@@ -1,11 +1,6 @@
 node_modules/
 dist/
 .cache/
+graphify-out/
 *.log
 .DS_Store
-
-# But track these subpaths inside dist/
-!dist/aur/
-!dist/aur/*
-!dist/flatpak/
-!dist/flatpak/*

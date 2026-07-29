@@ -8,11 +8,19 @@ const MAX_OPERATIONS = 500;
 
 function redactSensitive(value) {
   return String(value ?? '')
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[REDACTED_PRIVATE_KEY]')
+    .replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, '[REDACTED_AWS_KEY]')
+    .replace(/\bAIza[0-9A-Za-z_-]{30,}\b/g, '[REDACTED_GOOGLE_KEY]')
+    .replace(/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, '[REDACTED_SLACK_TOKEN]')
+    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, '$1[REDACTED]@')
     .replace(/(payload=)[^\s&#]+/gi, '$1[REDACTED]')
     .replace(/(#payload=)[^\s]+/gi, '$1[REDACTED]')
     .replace(/(access_token=)[^\s&#]+/gi, '$1[REDACTED]')
     .replace(/(refresh_token=)[^\s&#]+/gi, '$1[REDACTED]')
     .replace(/\bgh[pousr]_[A-Za-z0-9_]+\b/g, '[REDACTED_GITHUB_TOKEN]')
+    .replace(/(authorization\s*[:=]\s*(?:bearer\s+)?)[^\s,;]+/gi, '$1[REDACTED]')
+    .replace(/((?:api[_-]?key|client[_-]?secret|pass(?:word|phrase)?|private[_-]?key|oauth[_-]?code|credential|csrf|xsrf|token|secret|ticket|sas)\s*[=:]\s*)[^\s&#,;]+/gi, '$1[REDACTED]')
+    .replace(/([?&#](?:code|key|auth|signature)=)[^&#\s]+/gi, '$1[REDACTED]')
     .replace(/\b[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{24,}\b/g, '[REDACTED_JWT]');
 }
 
@@ -24,7 +32,7 @@ function sanitizeForStorage(value) {
   if (typeof value === 'object') {
     const out = {};
     for (const [key, raw] of Object.entries(value)) {
-      if (/password|token|secret|payload|session|cookie/i.test(key)) out[key] = '[REDACTED]';
+      if (/password|passphrase|token|secret|payload|session|cookie|authorization|credential|csrf|xsrf|ticket|api.?key|private.?key|client.?secret|oauth.?code/i.test(key)) out[key] = '[REDACTED]';
       else out[key] = sanitizeForStorage(raw);
     }
     return out;
@@ -113,7 +121,8 @@ function createOperationStore(filePath) {
   }
 
   function list(limit = 50) {
-    return load().operations.slice(-limit).reverse();
+    const safeLimit = Number.isFinite(Number(limit)) ? Math.min(500, Math.max(1, Math.trunc(Number(limit)))) : 50;
+    return load().operations.slice(-safeLimit).reverse();
   }
 
   function clear() {

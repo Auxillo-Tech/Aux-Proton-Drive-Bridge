@@ -5,7 +5,12 @@ const childProcess = require('node:child_process');
 
 const root = path.join(__dirname, '..');
 const env = { ...process.env, ELECTRON_ENABLE_LOGGING: '1' };
-const child = spawn(path.join(root, 'node_modules', '.bin', 'electron'), ['.', '--remote-debugging-port=9339', '--remote-allow-origins=http://127.0.0.1:9339'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+const executable = process.env.SMOKE_EXECUTABLE || path.join(root, 'node_modules', '.bin', 'electron');
+const debugArgs = ['--remote-debugging-port=9339', '--remote-allow-origins=http://127.0.0.1:9339'];
+const extraArgs = process.env.SMOKE_EXTRA_ARGS ? JSON.parse(process.env.SMOKE_EXTRA_ARGS) : [];
+if (!Array.isArray(extraArgs) || extraArgs.some(value => typeof value !== 'string')) throw new Error('SMOKE_EXTRA_ARGS must be a JSON string array');
+const args = process.env.SMOKE_EXECUTABLE ? [...debugArgs, ...extraArgs] : ['.', ...debugArgs, ...extraArgs];
+const child = spawn(executable, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let output = '';
 child.stdout.on('data', d => output += d);
 child.stderr.on('data', d => output += d);
@@ -44,7 +49,7 @@ function getJson(pathname) {
     }
     if (!page) throw new Error('CDP page did not appear: ' + output.slice(-1000));
     if (!String(page.title).includes('Aux Proton Drive Bridge')) throw new Error(`Unexpected title: ${page.title}; url=${page.url}; logs=${output.slice(-1000)}`);
-    console.log('source smoke passed:', page.title);
+    console.log(`${process.env.SMOKE_EXECUTABLE ? 'installed package' : 'source'} smoke passed:`, page.title);
   } finally {
     killTree(child.pid, 'SIGTERM');
     const killer = setTimeout(() => killTree(child.pid, 'SIGKILL'), 1000);

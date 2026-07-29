@@ -11,14 +11,18 @@
  */
 
 const EventEmitter = require('node:events');
-const { runProton, buildCommand } = require('./protonCli');
+const { buildCommand } = require('./protonCli');
 const { parseProgressLine, summarizeTransfer } = require('./progressParser');
+const { withProtonProcessLock } = require('./protonProcessLock');
+const { buildChildEnv } = require('./childProcessEnv');
 
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 
-const RETRYABLE_EXIT_CODES = new Set([null, undefined]);
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
+const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
+const MAX_QUEUE_DEPTH = 1000;
+const DEFAULT_TRANSFER_TIMEOUT_MS = 2 * 60 * 60_000;
 
 /**
  * Create a new transfer queue.
@@ -30,12 +34,19 @@ const RETRY_DELAY_MS = 2000;
 function createTransferQueue(options = {}) {
   const concurrency = Math.max(1, options.concurrency || 2);
   const syncDb = options.syncDb || null;
+  const spawnImpl = options.spawn || require('node:child_process').spawn;
+  const protonBin = options.protonBin || process.env.PROTON_DRIVE_BIN || 'proton-drive';
+  const retryDelayMs = Number.isFinite(options.retryDelayMs) ? Math.max(0, options.retryDelayMs) : RETRY_DELAY_MS;
+  const transferTimeoutMs = Number.isFinite(options.transferTimeoutMs)
+    ? Math.max(1000, options.transferTimeoutMs)
+    : DEFAULT_TRANSFER_TIMEOUT_MS;
 
   const emitter = new EventEmitter();
   const pending = [];        // { id, action, options, priority, retries, createdAt }
   const active = new Map();  // id -> { operation, controller }
   const completed = [];      // recent completed operations (ring buffer)
   const COMPLETED_MAX = 100;
+  const idleWaiters = new Set();
 
   let isPaused = false;
   let nextId = 1;
@@ -48,6 +59,12 @@ function createTransferQueue(options = {}) {
 
   function emit(event, payload) {
     emitter.emit(event, payload);
+  }
+
+  function notifyIdleWaiters() {
+    if (active.size || pending.length) return;
+    for (const resolve of idleWaiters) resolve(true);
+    idleWaiters.clear();
   }
 
   function dequeue() {
@@ -81,11 +98,16 @@ function createTransferQueue(options = {}) {
       active.delete(item.id);
 
       // Store in completed ring buffer
-      const record = { id: item.id, action: item.action, options: item.options, status: 'succeeded', result, completedAt: new Date().toISOString() };
+      const wasSkipped = result.summary?.totalSkipped > 0;
+      const hadErrors = result.summary?.totalErrors > 0;
+      const status = hadErrors ? 'failed' : (wasSkipped ? 'skipped' : 'succeeded');
+      const record = { id: item.id, action: item.action, options: item.options, status, result, completedAt: new Date().toISOString() };
       completed.unshift(record);
       if (completed.length > COMPLETED_MAX) completed.length = COMPLETED_MAX;
 
-      emit('complete', { id: item.id, action: item.action, options: item.options, result, ts: new Date().toISOString() });
+      const payload = { id: item.id, action: item.action, options: item.options, result, ts: new Date().toISOString() };
+      if (hadErrors) emit('error', { ...payload, error: `Proton Drive reported ${result.summary.totalErrors} transfer error(s)` });
+      else emit(wasSkipped ? 'skipped' : 'complete', payload);
     } catch (err) {
       active.delete(item.id);
 
@@ -104,6 +126,7 @@ function createTransferQueue(options = {}) {
 
     // Try next
     dequeue();
+    notifyIdleWaiters();
   }
 
   async function runTransferWithRetry(item, signal) {
@@ -114,7 +137,7 @@ function createTransferQueue(options = {}) {
 
       if (attempt > 1) {
         emit('retry', { id: item.id, attempt, maxRetries: MAX_RETRIES, ts: new Date().toISOString() });
-        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        await new Promise(r => setTimeout(r, retryDelayMs));
       }
 
       try {
@@ -124,16 +147,14 @@ function createTransferQueue(options = {}) {
         if (err.cancelled || err.name === 'AbortError') throw err;
 
         lastError = err;
-        const exitCode = err.result?.code;
-
-        // Non-retryable errors
-        if (exitCode !== null && exitCode !== undefined && !RETRYABLE_EXIT_CODES.has(exitCode)) break;
         if (err.message && (
           err.message.includes('ENOENT') ||
           err.message.includes('EACCES') ||
           err.message.includes('ENOSPC') ||
           err.message.includes('not found')
         )) break;
+        const transient = err.result?.code == null || /ECONN|ETIMEDOUT|network|temporar|connection reset|timeout|database is locked|SQLITE_BUSY|rate limit|\b429\b|\b5\d\d\b/i.test(err.message || '');
+        if (!transient) break;
 
         emit('progress', { id: item.id, action: item.action, stream: 'stderr', text: `Attempt ${attempt} failed: ${err.message}`, ts: new Date().toISOString() });
       }
@@ -143,21 +164,27 @@ function createTransferQueue(options = {}) {
   }
 
   function runTransferOnce(item, signal) {
-    return new Promise((resolve, reject) => {
-      const { bin, args } = buildCommand(item.action, item.options);
-      const env = { ...process.env, PROTON_DRIVE_LOG_LEVEL: item.options.logLevel || 'ERROR' };
+    return withProtonProcessLock(() => new Promise((resolve, reject) => {
+      const { bin, args } = buildCommand(item.action, item.options, protonBin);
+      const env = buildChildEnv({ PROTON_DRIVE_LOG_LEVEL: item.options.logLevel || 'ERROR' });
 
-      const { spawn } = require('node:child_process');
-      const child = spawn(bin, args, { shell: false, windowsHide: true, env, signal });
+      const child = spawnImpl(bin, args, { shell: false, windowsHide: true, env, signal });
 
       let stdout = '';
       let stderr = '';
       const allLines = [];
+      const lineBuffers = { stdout: '', stderr: '' };
       let settled = false;
+      const timeout = setTimeout(() => {
+        cleanupChild();
+        settle(new Error(`Proton Drive ${item.action} timed out after ${transferTimeoutMs} ms`));
+      }, transferTimeoutMs);
+      timeout.unref?.();
 
       function settle(err, result) {
         if (settled) return;
         settled = true;
+        clearTimeout(timeout);
         if (err) reject(err);
         else resolve(result);
       }
@@ -166,39 +193,52 @@ function createTransferQueue(options = {}) {
         try { if (!child.killed) child.kill('SIGKILL'); } catch {}
       }
 
+      function appendOutput(stream, text) {
+        if (Buffer.byteLength(stdout) + Buffer.byteLength(stderr) + Buffer.byteLength(text) > MAX_OUTPUT_BYTES) {
+          cleanupChild();
+          settle(new Error(`Proton Drive ${item.action} output exceeded ${MAX_OUTPUT_BYTES} bytes`));
+          return false;
+        }
+        if (stream === 'stdout') stdout += text;
+        else stderr += text;
+        return true;
+      }
+
+      function consumeOutput(stream, text, flush = false) {
+        lineBuffers[stream] += text;
+        const parts = lineBuffers[stream].split('\n');
+        const remainder = parts.pop() || '';
+        lineBuffers[stream] = flush ? '' : remainder;
+        if (flush && remainder) parts.push(remainder);
+        for (const line of parts) {
+          if (!line) continue;
+          allLines.push(line);
+          const parsed = parseProgressLine(line);
+          if (parsed) emit('progress', { id: item.id, action: item.action, stream, text: line, ...parsed, ts: new Date().toISOString() });
+        }
+      }
+
       child.stdout.on('data', data => {
         if (settled) return;
         const text = data.toString();
-        stdout += text;
-        const lines = text.split('\n').filter(Boolean);
-        for (const line of lines) {
-          allLines.push(line);
-          const parsed = parseProgressLine(line);
-          if (parsed) {
-            emit('progress', { id: item.id, action: item.action, stream: 'stdout', ...parsed, ts: new Date().toISOString() });
-          }
-        }
+        if (!appendOutput('stdout', text)) return;
+        consumeOutput('stdout', text);
         emit('progress', { id: item.id, action: item.action, stream: 'stdout', text: text.trim(), ts: new Date().toISOString() });
       });
 
       child.stderr.on('data', data => {
         if (settled) return;
         const text = data.toString();
-        stderr += text;
-        const lines = text.split('\n').filter(Boolean);
-        for (const line of lines) {
-          allLines.push(line);
-          const parsed = parseProgressLine(line);
-          if (parsed) {
-            emit('progress', { id: item.id, action: item.action, stream: 'stderr', ...parsed, ts: new Date().toISOString() });
-          }
-        }
+        if (!appendOutput('stderr', text)) return;
+        consumeOutput('stderr', text);
         emit('progress', { id: item.id, action: item.action, stream: 'stderr', text: text.trim(), ts: new Date().toISOString() });
       });
 
       child.on('error', (err) => settle(err));
 
       child.on('close', code => {
+        consumeOutput('stdout', '', true);
+        consumeOutput('stderr', '', true);
         const result = { code, stdout, stderr, command: [bin, ...args] };
 
         if (code === 0) {
@@ -215,12 +255,15 @@ function createTransferQueue(options = {}) {
       if (signal && typeof signal.addEventListener === 'function') {
         signal.addEventListener('abort', cleanupChild, { once: true });
       }
-    });
+    }), signal);
   }
 
   // ── Public API ─────────────────────────────────────────────
 
   function enqueue(action, options = {}, priority = 'medium') {
+    if (pending.length + active.size >= MAX_QUEUE_DEPTH) {
+      throw new Error(`Transfer queue is full (${MAX_QUEUE_DEPTH})`);
+    }
     if (!['high', 'medium', 'low'].includes(priority)) priority = 'medium';
     const id = generateId();
     const item = { id, action, options, priority, retries: options.retries || MAX_RETRIES, createdAt: Date.now() };
@@ -256,7 +299,35 @@ function createTransferQueue(options = {}) {
     for (const item of cancelled) {
       emit('cancelled', { id: item.id, action: item.action, options: item.options, ts: new Date().toISOString() });
     }
+    notifyIdleWaiters();
     return { cancelledActive: active.size, cancelledPending: cancelled.length };
+  }
+
+  function waitForIdle(timeoutMs = 10_000) {
+    if (!active.size && !pending.length) return Promise.resolve(true);
+    return new Promise((resolve, reject) => {
+      const done = () => { clearTimeout(timer); idleWaiters.delete(done); resolve(true); };
+      const timer = setTimeout(() => {
+        idleWaiters.delete(done);
+        reject(new Error(`Transfer queue did not become idle within ${timeoutMs} ms`));
+      }, timeoutMs);
+      timer.unref?.();
+      idleWaiters.add(done);
+    });
+  }
+
+  function waitForSettled(ids, timeoutMs = 10_000) {
+    const wanted = new Set(ids || []);
+    const deadline = Date.now() + timeoutMs;
+    return new Promise((resolve, reject) => {
+      const check = () => {
+        const outstanding = pending.some(item => wanted.has(item.id)) || [...active.keys()].some(id => wanted.has(id));
+        if (!outstanding) return resolve(true);
+        if (Date.now() >= deadline) return reject(new Error(`Transfers did not settle within ${timeoutMs} ms`));
+        setTimeout(check, 20);
+      };
+      check();
+    });
   }
 
   function pause() {
@@ -295,12 +366,13 @@ function createTransferQueue(options = {}) {
     return () => emitter.off(event, handler);
   }
 
-  function destroy() {
+  async function destroy() {
     cancelAll();
+    await waitForIdle();
     emitter.removeAllListeners();
   }
 
-  return { enqueue, cancel, cancelAll, pause, resume, getState, on, destroy, emitter };
+  return { enqueue, cancel, cancelAll, pause, resume, getState, waitForIdle, waitForSettled, on, destroy, emitter };
 }
 
-module.exports = { createTransferQueue, MAX_RETRIES };
+module.exports = { createTransferQueue, MAX_RETRIES, MAX_QUEUE_DEPTH };
