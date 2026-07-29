@@ -55,12 +55,17 @@ describe('autoUpdater — version parsing and comparison', () => {
     assert.strictEqual(updater.isNewer('0.3.0', '0.3.1'), true);
   });
 
-  it('checkForUpdates returns {hasUpdate:false} when called with no network', async () => {
-    // This should fail gracefully since there's no network/GitHub access in test
+  it('checkForUpdates returns a stable result object without throwing', async () => {
+    // Live GitHub may or may not be reachable; a newer release may exist.
+    // Only require a non-throwing, well-shaped response.
     const result = await updater.checkForUpdates();
-    // Either hasUpdate: false with an error, or it fails — both are acceptable outcomes
-    // The important thing is it doesn't crash
-    assert.ok(result.hasUpdate === false || result.error);
+    assert.ok(result && typeof result === 'object');
+    assert.ok(typeof result.hasUpdate === 'boolean');
+    if (result.hasUpdate) {
+      assert.ok(result.latestVersion || result.update?.version);
+    } else {
+      assert.ok(result.error === undefined || typeof result.error === 'string' || result.error);
+    }
   });
 });
 
