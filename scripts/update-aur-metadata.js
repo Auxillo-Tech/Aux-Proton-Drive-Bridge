@@ -42,9 +42,15 @@ package() {
   cd "\${srcdir}"
   chmod +x "${appImageName}"
   "./${appImageName}" --appimage-extract >/dev/null
-  install -Dm644 squashfs-root/usr/share/applications/*.desktop -t "\${pkgdir}/usr/share/applications"
+  if compgen -G "squashfs-root/usr/share/applications/*.desktop" > /dev/null; then
+    install -Dm644 squashfs-root/usr/share/applications/*.desktop -t "\${pkgdir}/usr/share/applications"
+  elif [[ -f squashfs-root/aux-proton-drive-bridge.desktop ]]; then
+    install -Dm644 squashfs-root/aux-proton-drive-bridge.desktop "\${pkgdir}/usr/share/applications/aux-proton-drive-bridge.desktop"
+  fi
   if [[ -d squashfs-root/usr/share/icons ]]; then
     cp -a squashfs-root/usr/share/icons "\${pkgdir}/usr/share/"
+  elif [[ -f squashfs-root/aux-proton-drive-bridge.png ]]; then
+    install -Dm644 squashfs-root/aux-proton-drive-bridge.png "\${pkgdir}/usr/share/icons/hicolor/256x256/apps/aux-proton-drive-bridge.png"
   fi
   rm -rf squashfs-root
 }
