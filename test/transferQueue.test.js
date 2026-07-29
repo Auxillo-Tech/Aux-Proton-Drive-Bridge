@@ -4,7 +4,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const EventEmitter = require('node:events');
-const { createTransferQueue, MAX_RETRIES } = require('../src/main/transferQueue');
+const { createTransferQueue, MAX_RETRIES, MAX_QUEUE_DEPTH } = require('../src/main/transferQueue');
 
 describe('transferQueue — queue management', () => {
   let queue;
@@ -137,5 +137,128 @@ describe('transferQueue — queue management', () => {
         resolve();
       }, 500);
     });
+  });
+
+  it('rejects enqueue when the bounded queue is full', () => {
+    queue = makeQueue({ concurrency: 1 });
+    queue.pause();
+    for (let i = 0; i < MAX_QUEUE_DEPTH; i++) queue.enqueue('list', { path: '/my-files' });
+    assert.throws(() => queue.enqueue('list', { path: '/my-files' }), /queue is full/);
+  });
+});
+
+describe('transferQueue — execution safety', () => {
+  function scriptedSpawn(outcomes, tracker = {}) {
+    return (_bin, _args, options = {}) => {
+      const outcome = outcomes.shift() || { code: 0 };
+      tracker.calls = (tracker.calls || 0) + 1;
+      tracker.active = (tracker.active || 0) + 1;
+      tracker.maxActive = Math.max(tracker.maxActive || 0, tracker.active);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => {
+        tracker.active--;
+        setImmediate(() => child.emit('close', null, 'SIGKILL'));
+      };
+      const finish = () => {
+        for (const chunk of (Array.isArray(outcome.stdout) ? outcome.stdout : [outcome.stdout]).filter(Boolean)) child.stdout.emit('data', Buffer.from(chunk));
+        for (const chunk of (Array.isArray(outcome.stderr) ? outcome.stderr : [outcome.stderr]).filter(Boolean)) child.stderr.emit('data', Buffer.from(chunk));
+        tracker.active--;
+        child.emit('close', outcome.code ?? 0, null);
+      };
+      const timer = setTimeout(finish, outcome.delay || 0);
+      options.signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        tracker.active--;
+        child.emit('error', Object.assign(new Error('aborted'), { name: 'AbortError', code: 'ABORT_ERR' }));
+      }, { once: true });
+      return child;
+    };
+  }
+
+  it('retries a transient non-zero CLI failure', async () => {
+    const tracker = {};
+    const queue = createTransferQueue({ concurrency: 1, retryDelayMs: 0, spawn: scriptedSpawn([
+      { code: 1, stderr: 'network timeout' },
+      { code: 0, stdout: '✓ uploaded.txt' }
+    ], tracker) });
+    const completed = new Promise((resolve, reject) => {
+      queue.on('complete', resolve);
+      queue.on('error', payload => reject(new Error(payload.error)));
+    });
+    queue.enqueue('upload', { localPaths: ['/tmp/uploaded.txt'], parentPath: '/my-files', retries: 2 });
+    await completed;
+    assert.strictEqual(tracker.calls, 2);
+    await queue.destroy();
+  });
+
+  it('emits skipped instead of complete for a zero-exit skipped transfer', async () => {
+    const queue = createTransferQueue({ concurrency: 1, spawn: scriptedSpawn([{ code: 0, stdout: 'Skipped: 1' }]) });
+    let completed = false;
+    queue.on('complete', () => { completed = true; });
+    const payload = await new Promise(resolve => {
+      queue.on('skipped', resolve);
+      queue.enqueue('upload', { localPaths: ['/tmp/existing.txt'], parentPath: '/my-files' });
+    });
+    assert.strictEqual(completed, false);
+    assert.strictEqual(payload.result.summary.totalSkipped, 1);
+    await queue.destroy();
+  });
+
+  it('emits an error instead of complete for zero-exit per-file failures', async () => {
+    const queue = createTransferQueue({ concurrency: 1, spawn: scriptedSpawn([{ code: 0, stdout: '✗ failed.txt\n' }]) });
+    let completed = false;
+    queue.on('complete', () => { completed = true; });
+    const payload = await new Promise(resolve => {
+      queue.on('error', resolve);
+      queue.enqueue('upload', { localPaths: ['/tmp/failed.txt'], parentPath: '/my-files' });
+    });
+    assert.strictEqual(completed, false);
+    assert.strictEqual(payload.result.summary.totalErrors, 1);
+    await queue.destroy();
+  });
+
+  it('detects skipped lines split across process output chunks', async () => {
+    const queue = createTransferQueue({ concurrency: 1, spawn: scriptedSpawn([{ code: 0, stdout: ['Skipped:', ' 1\n'] }]) });
+    let completed = false;
+    queue.on('complete', () => { completed = true; });
+    const payload = await new Promise(resolve => {
+      queue.on('skipped', resolve);
+      queue.enqueue('upload', { localPaths: ['/tmp/existing.txt'], parentPath: '/my-files' });
+    });
+    assert.strictEqual(completed, false);
+    assert.strictEqual(payload.result.summary.totalSkipped, 1);
+    await queue.destroy();
+  });
+
+  it('awaits active cancellation before removing queue listeners', async () => {
+    const queue = createTransferQueue({ concurrency: 1, spawn: scriptedSpawn([{ code: 0, delay: 1000 }]) });
+    let cancelled = false;
+    queue.on('cancelled', () => { cancelled = true; });
+    queue.enqueue('upload', { localPaths: ['/tmp/cancel.txt'], parentPath: '/my-files' });
+    while (!queue.getState().active.length) await new Promise(resolve => setTimeout(resolve, 1));
+    await queue.destroy();
+    assert.strictEqual(cancelled, true);
+    assert.strictEqual(queue.getState().active.length, 0);
+  });
+
+  it('serializes Proton CLI processes across separate queue instances', async () => {
+    const tracker = {};
+    const spawn = scriptedSpawn([{ code: 0, delay: 20 }, { code: 0, delay: 20 }], tracker);
+    const first = createTransferQueue({ concurrency: 1, spawn });
+    const second = createTransferQueue({ concurrency: 1, spawn });
+    let finished = 0;
+    const done = new Promise(resolve => {
+      const mark = () => { if (++finished === 2) resolve(); };
+      first.on('complete', mark);
+      second.on('complete', mark);
+    });
+    first.enqueue('list', { path: '/my-files' });
+    second.enqueue('list', { path: '/my-files' });
+    await done;
+    assert.strictEqual(tracker.maxActive, 1);
+    await first.destroy();
+    await second.destroy();
   });
 });

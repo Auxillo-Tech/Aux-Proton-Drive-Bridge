@@ -67,3 +67,9 @@ Aux Proton Drive Bridge fragt niemals nach Ihrem Proton-Passwort. Die Authentifi
 ---
 
 > Vollständige Dokumentation auf Englisch: [README.md](README.md)
+
+---
+
+## Unterstützung
+
+Wenn Aux Proton Drive Bridge hilfreich ist, kannst du mir einen [Kaffee ausgeben](https://www.buymeacoffee.com/auxillo).

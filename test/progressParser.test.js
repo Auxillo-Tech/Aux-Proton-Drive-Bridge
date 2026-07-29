@@ -103,6 +103,11 @@ describe('progressParser — parseProgressLine', () => {
     assert.strictEqual(result.pct, 4); // round(5/120*100)
   });
 
+  it('parses skipped transfer summaries', () => {
+    assert.deepStrictEqual(parseProgressLine('Skipped: 3'), { type: 'skipped', count: 3, detail: null });
+    assert.deepStrictEqual(parseProgressLine('Skipped: existing.txt'), { type: 'skipped', count: 1, detail: 'existing.txt' });
+  });
+
 });
 
 describe('progressParser — summarizeTransfer', () => {
@@ -148,6 +153,12 @@ describe('progressParser — summarizeTransfer', () => {
     ];
     const s = summarizeTransfer(lines);
     assert.strictEqual(s.currentFile, 'b.txt');
+  });
+
+  it('does not treat a zero-exit skipped transfer as complete', () => {
+    const summary = summarizeTransfer(['Skipped: 2', 'Skipped: existing.txt']);
+    assert.strictEqual(summary.totalSkipped, 3);
+    assert.deepStrictEqual(summary.skipped, ['existing.txt']);
   });
 
 });

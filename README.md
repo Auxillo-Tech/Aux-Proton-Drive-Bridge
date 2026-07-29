@@ -10,13 +10,13 @@ Unofficial Linux desktop bridge for Proton Drive using Proton's official `proton
 
 Version **`0.3.0`** - Full-featured sync, transfer queue, conflict resolution, and FUSE mount support.
 
-Aux Proton Drive Bridge gives Linux users a GUI for Proton Drive operations through Proton's official CLI. Now with persistent sync metadata tracking, bidirectional sync engine, live transfer queue, conflict management, auto-updates, and optional FUSE mount.
+Aux Proton Drive Bridge gives Linux users a GUI for Proton Drive operations through Proton's official CLI. It includes persistent sync metadata, bidirectional sync, a live transfer queue, conflict management, signed updates, and capability-gated mount status.
 
 ## Download
 
 GitHub release:
 
-<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.3.0>
+<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/latest>
 
 Release assets include:
 
@@ -26,7 +26,7 @@ Release assets include:
 - source archives
 - `SHA256SUMS.txt`
 - `release-manifest.json`
-- GPG signatures (`.asc`) and/or signify signatures (`.sig`)
+- required Ed25519 signature (`SHA256SUMS.txt.sig`)
 
 > Current repository visibility may be private until Auxillo chooses to make it public.
 
@@ -78,7 +78,9 @@ Existing local files should not be overwritten by default.
 - A Proton account
 - Browser access for Proton login
 - Linux secret store supported by Proton CLI, such as KWallet, GNOME Keyring/libsecret, or `pass`
-- FUSE: optional, only required for FUSE mount feature
+- FUSE is unavailable with Proton Drive CLI 0.6.0 because that CLI has no mount command
+
+The installed CLI owns authentication. The bridge supports one active Proton account/session at a time; saved backup settings do not create separate authentication contexts.
 
 ## Quick install
 
@@ -87,7 +89,7 @@ Existing local files should not be overwritten by default.
 Download and run:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage
 ```
 
 Make it executable and run it from your file manager or terminal.
@@ -97,7 +99,7 @@ Make it executable and run it from your file manager or terminal.
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.1-amd64.deb
 ```
 
 Install with your graphical package installer or with `apt`/`dpkg`.
@@ -107,7 +109,7 @@ Install with your graphical package installer or with `apt`/`dpkg`.
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm
 ```
 
 Install with your graphical package installer, `dnf`, `zypper`, or `rpm`.
@@ -126,7 +128,9 @@ See full instructions: [`docs/INSTALL.md`](docs/INSTALL.md).
 8. Click **Download selected**, **Download everything**, or **Upload files/folders**.
 9. Check the **Sync** tab to start background sync.
 10. View **Conflicts** tab to resolve any detected conflicts.
-11. Use **FUSE Mount** tab to mount Proton Drive as a directory.
+11. Check the **FUSE Mount** tab for capability status. Proton Drive CLI 0.6.0 reports mounting as unavailable.
+
+Sync never propagates deletion. It restores or preserves the surviving copy according to the selected direction instead of deleting cloud or local data. Skipped transfers remain unresolved and are shown as conflicts.
 
 See full usage guide: [`docs/USAGE.md`](docs/USAGE.md).
 
@@ -141,7 +145,7 @@ See full usage guide: [`docs/USAGE.md`](docs/USAGE.md).
 ## Build from source
 
 ```bash
-npm install
+npm ci
 npm run check
 npm start
 ```
@@ -150,7 +154,7 @@ Build local release artifacts:
 
 ```bash
 npm run check
-npm run release:all    # Build, sign, and generate manifest
+npm run dist:linux     # Build AppImage, .deb, .rpm on Linux
 ```
 
 Release outputs are written to `dist/`.
@@ -170,9 +174,9 @@ See [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Roadmap
 
-### v0.3.0
+### v0.3.1
 
-All items from the v0.2.x roadmap are now implemented:
+Implemented foundations:
 
 - Sync metadata DB (SQLite)
 - Live transfer queue
@@ -182,11 +186,9 @@ All items from the v0.2.x roadmap are now implemented:
 - Auto-update via GitHub Releases
 - Signing/attestation scripts
 - File manager integration
-- Optional FUSE mount
+- Explicit unsupported FUSE status for CLI 0.6.0, with no speculative mount process
 - Desktop notifications
-- Selective sync profiles
 - Conflict review UI with metadata diff viewer
-- Multi-account profile support
 
 ### Future
 

@@ -35,6 +35,18 @@ describe('fuseMount — state management (no real FUSE)', () => {
     assert.ok(typeof available === 'boolean');
   });
 
+  it('reports unavailable when the Proton CLI has no mount command', () => {
+    const fakeCli = path.join(tmpDir, 'fake-proton-drive');
+    fs.writeFileSync(fakeCli, '#!/bin/sh\necho "Command not found: filesystem mount" >&2\nexit 1\n', { mode: 0o755 });
+    const unsupported = createFuseMount({
+      mountPoint: path.join(tmpDir, 'unsupported-mount'),
+      cliBin: fakeCli,
+      logger: { info: () => {}, warn: () => {}, error: () => {} }
+    });
+    assert.strictEqual(unsupported.isFuseAvailable(), false);
+    unsupported.destroy();
+  });
+
   it('getStatus returns expected shape', () => {
     const status = mount.getStatus();
     assert.ok('state' in status);

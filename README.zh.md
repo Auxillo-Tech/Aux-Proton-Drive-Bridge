@@ -67,3 +67,9 @@ Aux Proton Drive Bridge 从不询问您的 Proton 密码。身份验证委托给
 ---
 
 > 完整英文文档：[README.md](README.md)
+
+---
+
+## 支持
+
+如果 Aux Proton Drive Bridge 对你有帮助，可以[请我喝杯咖啡](https://www.buymeacoffee.com/auxillo)。
