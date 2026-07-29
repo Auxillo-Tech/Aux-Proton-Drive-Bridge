@@ -196,3 +196,10 @@ All items from the v0.2.x roadmap are now implemented:
 - Desktop notifications for all events
 - Advanced conflict diff viewer with content comparison
 - Multi-account simultaneous sync
+
+---
+
+## Support
+
+Aux Proton Drive Bridge is free and open source. If it helps your workflow, you can [buy me a coffee](https://www.buymeacoffee.com/auxillo).
+
