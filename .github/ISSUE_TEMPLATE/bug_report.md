@@ -5,16 +5,16 @@ title: "[bug] "
 labels: bug
 ---
 
+## Summary
+
+<!-- What went wrong? -->
+
 ## Environment
 
-- App version:
-- Package format (AppImage / deb / rpm / source):
-- Distro:
-- Desktop environment:
-
-## What happened
-
-## What you expected
+- Aux Proton Drive Bridge version:
+- Install method (AppImage / deb / rpm / source):
+- Linux distribution and version:
+- Proton Drive CLI version (`proton-drive version`):
 
 ## Steps to reproduce
 
@@ -22,6 +22,14 @@ labels: bug
 2.
 3.
 
+## Expected behavior
+
+## Actual behavior
+
 ## Logs / evidence
 
-<!-- Redact tokens and personal paths -->
+<!-- Do not include Proton passwords, 2FA codes, recovery phrases, session tokens, or auth URL payloads. -->
+
+## Impact
+
+<!-- Sync data loss, mount failure, crash, UI-only, etc. -->

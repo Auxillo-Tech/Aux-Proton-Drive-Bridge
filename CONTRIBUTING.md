@@ -42,3 +42,7 @@ Changes in these areas need extra review:
 ## License
 
 By contributing, you agree that your contributions are licensed under the MIT License.
+
+## Code of Conduct
+
+Please read and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
