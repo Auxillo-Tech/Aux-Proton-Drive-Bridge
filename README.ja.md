@@ -67,3 +67,9 @@ Aux Proton Drive Bridge は Proton パスワードを決して要求しません
 ---
 
 > 完全な英語ドキュメント：[README.md](README.md)
+
+---
+
+## サポート
+
+Aux Proton Drive Bridge が役立つ場合は、[コーヒーを奢ってください](https://www.buymeacoffee.com/auxillo)。

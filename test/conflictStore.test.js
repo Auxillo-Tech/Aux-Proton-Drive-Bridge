@@ -23,7 +23,7 @@ describe('conflictStore — Conflict Detection and Resolution', () => {
   it('detects LOCAL_REMOTE_MODIFY when both sides changed', () => {
     const local = { path: '/local/file.txt', modified: '2026-07-24T12:00:00Z', size: 200 };
     const remote = { path: '/remote/file.txt', modified: '2026-07-24T13:00:00Z', size: 300 };
-    const lastSync = { local_modified: '2026-07-24T10:00:00Z', remote_modified: '2026-07-24T10:00:00Z', size: 100, sync_state: 'synced' };
+    const lastSync = { local_modified: '2026-07-24T12:00:00Z', remote_modified: '2026-07-24T13:00:00Z', local_size: 200, remote_size: 300, synced_local_modified: '2026-07-24T10:00:00Z', synced_remote_modified: '2026-07-24T10:00:00Z', synced_local_size: 100, synced_remote_size: 100, sync_state: 'local_modified' };
 
     const conflict = store.detect(local, remote, lastSync);
     assert.notStrictEqual(conflict, null);
@@ -105,6 +105,12 @@ describe('conflictStore — Conflict Detection and Resolution', () => {
     assert.ok(active.some(c => c.remotePath.includes('conflict.txt')));
   });
 
+  it('rehydrates open conflicts after the store is recreated', () => {
+    const recreated = createConflictStore(db);
+    const active = recreated.listActive();
+    assert.ok(active.some(c => c.remotePath.includes('conflict.txt')));
+  });
+
   it('resolves a conflict with keep_local strategy', () => {
     const active = store.listActive();
     const conflict = active.find(c => c.remotePath.includes('conflict.txt'));
@@ -151,6 +157,21 @@ describe('conflictStore — Conflict Detection and Resolution', () => {
     store.record(c);
     const result = store.resolve(c.id, 'skip');
     assert.strictEqual(result.nextAction.action, 'none');
+  });
+
+  it('keeps a conflict open until a queued resolution transfer completes', () => {
+    const c = store.detect(
+      { path: '/local/deferred.txt', modified: '2026-07-24T12:00:00Z', size: 200, type: 'file' },
+      { path: '/remote/deferred.txt', modified: '2026-07-24T13:00:00Z', size: 300, type: 'file' },
+      null
+    );
+    store.record(c);
+    const prepared = store.prepareResolution(c.id, 'keep_local');
+    assert.strictEqual(prepared.nextAction.action, 'upload');
+    assert.ok(store.listActive().some(item => item.id === c.id));
+    store.commitResolution(c.id, 'keep_local', { transferCompleted: true });
+    assert.ok(!store.listActive().some(item => item.id === c.id));
+    assert.strictEqual(db.getTrackedFileByPath(c.remotePath).sync_state, 'synced');
   });
 
   it('returns false for unknown conflict ID', () => {

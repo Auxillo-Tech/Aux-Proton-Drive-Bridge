@@ -67,3 +67,9 @@ O Aux Proton Drive Bridge nunca solicita sua senha Proton. A autenticação é d
 ---
 
 > Documentação completa em inglês: [README.md](README.md)
+
+---
+
+## Apoio
+
+Se o Aux Proton Drive Bridge ajuda o seu trabalho, pode [oferecer-me um café](https://www.buymeacoffee.com/auxillo).

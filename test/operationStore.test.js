@@ -25,4 +25,14 @@ test('operation store redacts auth payloads and tokens', () => {
     token: '[REDACTED]',
     nested: { ok: 'safe', payload: '[REDACTED]' }
   });
+  assert.deepEqual(sanitizeForStorage({ passphrase: 'one', apiKey: 'two', authorization: 'Bearer three', privateKey: 'four', nested: { client_secret: 'five' } }), {
+    passphrase: '[REDACTED]', apiKey: '[REDACTED]', authorization: '[REDACTED]', privateKey: '[REDACTED]', nested: { client_secret: '[REDACTED]' }
+  });
+  assert.equal(redactSensitive('authorization: Bearer placeholder apiKey=def'), 'authorization: Bearer [REDACTED] apiKey=[REDACTED]');
+  const awsLike = `AKIA${'A'.repeat(16)}`;
+  const privateKeyLike = `-----BEGIN PRIVATE KEY-----\n${'A'.repeat(64)}\n-----END PRIVATE KEY-----`;
+  const generic = redactSensitive(`credential=opaque-value ${awsLike} ${privateKeyLike}`);
+  assert.equal(generic.includes('opaque-value'), false);
+  assert.equal(generic.includes(awsLike), false);
+  assert.equal(generic.includes('BEGIN PRIVATE KEY'), false);
 });

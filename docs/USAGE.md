@@ -19,7 +19,7 @@ A Linux desktop bridge for Proton Drive operations:
 - conflict detection and resolution
 - live transfer queue with pause/resume/cancel
 - software update checking via GitHub Releases
-- optional FUSE mount
+- capability-gated FUSE adapter; unavailable with Proton Drive CLI 0.6.0
 
 ## Tab overview
 
@@ -126,6 +126,8 @@ The **Sync** tab lets you start the background sync engine.
 
 > ⚠ Bidirectional sync is experimental. Start with **Conservative** mode and verify behavior before switching.
 
+The bridge uses a no-delete policy. When one side disappears, it preserves or restores the surviving copy instead of deleting cloud or local data. A transfer reported as skipped by the CLI remains unresolved and is shown as a conflict.
+
 ## Transfer queue
 
 The **Queue** tab shows the current state of all transfers:
@@ -144,14 +146,12 @@ When the sync engine detects that a file changed both locally and remotely, it r
 |---|---|
 | **keep_local** | Upload local version, overwriting remote |
 | **keep_remote** | Download remote version, overwriting local |
-| **keep_both** | Rename both sides with conflict suffix |
+| **keep_both** | Rename the local copy with a conflict suffix, then download the remote copy to the original path |
 | **skip** | Leave both sides as-is |
 
 ## FUSE mount
 
-If your system has FUSE support (`/dev/fuse`, `fusermount3` installed), you can mount Proton Drive as a local directory using the **FUSE Mount** tab.
-
-This depends on the `proton-drive` CLI having FUSE mount capabilities.
+The **FUSE Mount** tab reports mounting as unavailable in v0.3.1. Proton Drive CLI 0.6.0 has no mount command, and this release does not bundle a safely owned mount helper. The bridge does not start a guessed or orphanable mount process.
 
 ## Activity log
 

@@ -64,3 +64,9 @@ sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
 ---
 
 > Полная документация на английском: [README.md](README.md)
+
+---
+
+## Поддержка
+
+Если Aux Proton Drive Bridge помогает вам, можно [угостить меня кофе](https://www.buymeacoffee.com/auxillo).

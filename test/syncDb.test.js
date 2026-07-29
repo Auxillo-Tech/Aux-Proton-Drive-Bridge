@@ -61,6 +61,72 @@ describe('syncDb — SQLite sync metadata database', () => {
     assert.strictEqual(file.local_path, '/home/user/ProtonDrive/test.txt'); // preserved from original
   });
 
+  it('preserves omitted metadata and sync state during partial upserts', () => {
+    db.upsertTrackedFile({
+      remotePath: '/my-files/preserve-folder',
+      localPath: '/home/user/ProtonDrive/preserve-folder',
+      type: 'folder',
+      size: 4096,
+      syncState: 'synced'
+    });
+    db.upsertTrackedFile({
+      remotePath: '/my-files/preserve-folder',
+      localModified: '2026-07-27T11:00:00.000Z'
+    });
+    const file = db.getTrackedFileByPath('/my-files/preserve-folder');
+    assert.strictEqual(file.type, 'folder');
+    assert.strictEqual(file.size, 4096);
+    assert.strictEqual(file.sync_state, 'synced');
+    db.removeTrackedFile('/my-files/preserve-folder');
+  });
+
+  it('does not classify a freshly updated transfer as stale', () => {
+    db.upsertTrackedFile({
+      remotePath: '/my-files/fresh-upload.txt',
+      localPath: '/home/user/ProtonDrive/fresh-upload.txt',
+      type: 'file',
+      syncState: 'local_new'
+    });
+    db.setSyncState('/my-files/fresh-upload.txt', 'uploading');
+    const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    assert.strictEqual(db.getStaleItemsByState('uploading', cutoff).length, 0);
+    db.removeTrackedFile('/my-files/fresh-upload.txt');
+  });
+
+  it('keeps immutable last-synced baselines while current metadata changes', () => {
+    const remotePath = '/my-files/baseline.txt';
+    db.upsertTrackedFile({
+      remotePath,
+      localPath: '/tmp/baseline.txt',
+      localSize: 100,
+      remoteSize: 100,
+      localModified: '2026-07-24T10:00:00Z',
+      remoteModified: '2026-07-24T10:00:00Z',
+      syncState: 'pending_upload'
+    });
+    db.markSynced(remotePath);
+    db.upsertTrackedFile({
+      remotePath,
+      localSize: 200,
+      localModified: '2026-07-24T11:00:00Z',
+      syncState: 'local_modified'
+    });
+    const row = db.getTrackedFileByPath(remotePath);
+    assert.strictEqual(row.local_size, 200);
+    assert.strictEqual(row.synced_local_size, 100);
+    assert.strictEqual(row.synced_local_modified, '2026-07-24T10:00:00Z');
+    db.removeTrackedFile(remotePath);
+  });
+
+  it('stores independent local and remote size baselines', () => {
+    db.upsertTrackedFile({ remotePath: '/my-files/split-size.bin', type: 'file', size: 5000, remoteSize: 5000, syncState: 'synced' });
+    db.upsertTrackedFile({ remotePath: '/my-files/split-size.bin', size: 1000, localSize: 1000 });
+    const file = db.getTrackedFileByPath('/my-files/split-size.bin');
+    assert.strictEqual(file.local_size, 1000);
+    assert.strictEqual(file.remote_size, 5000);
+    db.removeTrackedFile('/my-files/split-size.bin');
+  });
+
   it('lists all tracked files', () => {
     // Add a second file
     db.upsertTrackedFile({
