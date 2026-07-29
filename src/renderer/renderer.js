@@ -4,6 +4,13 @@ const state = { items: [], selected: new Set(), localFolder: '', backupProfile: 
 const $ = (id) => document.getElementById(id);
 const logOutput = $('logOutput');
 
+function makeElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined && text !== null) element.textContent = String(text);
+  return element;
+}
+
 function log(message, kind = 'info') {
   const ts = new Date().toLocaleTimeString();
   logOutput.textContent += `[${ts}] ${kind.toUpperCase()} ${message}\n`;
@@ -18,13 +25,29 @@ function setStatus(status) {
   else dot.classList.add('bad');
   $('statusText').textContent = status.busy ? 'Proton CLI busy' : status.installed ? (status.authenticated ? 'Ready' : 'Login needed') : 'CLI missing';
   $('versionText').textContent = status.version || status.error || 'No version available';
+  const ready = Boolean(status.installed && status.authenticated && !status.busy);
+  for (const id of ['refreshBtn', 'downloadAllBtn', 'downloadSelectedBtn', 'uploadBtn', 'runBackupProfileBtn', 'syncStartBtn']) {
+    if ($(id)) $(id).disabled = !ready;
+  }
+  if ($('loginBtn')) $('loginBtn').disabled = !status.installed || status.authenticated || status.busy;
+  if ($('logoutBtn')) $('logoutBtn').disabled = !status.authenticated || status.busy;
 }
 
 // ── Tab switching ───────────────────────────────────────────
 
 function switchTab(tabName) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  currentTab = tabName;
+  document.querySelectorAll('.tab').forEach(t => {
+    const selected = t.id === `tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`;
+    t.classList.toggle('active', selected);
+    t.setAttribute('aria-selected', String(selected));
+    t.tabIndex = selected ? 0 : -1;
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    const selected = p.id === `panel${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`;
+    p.classList.toggle('active', selected);
+    p.hidden = !selected;
+  });
   const tabBtn = $(`tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
   if (tabBtn) tabBtn.classList.add('active');
   const panel = $(`panel${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
@@ -34,12 +57,30 @@ function switchTab(tabName) {
   if (tabName === 'conflicts') refreshConflicts();
   if (tabName === 'queue') refreshQueue();
   if (tabName === 'fuse') refreshFuse();
+  if (tabName === 'updates' && !updateCheckedThisSession) refreshUpdates();
+  startAutoRefresh();
 }
 
 // Tab click handlers
 ['Files', 'Sync', 'Conflicts', 'Queue', 'Fuse', 'Updates'].forEach(name => {
   const btn = $(`tab${name}`);
   if (btn) btn.addEventListener('click', () => switchTab(name.toLowerCase()));
+});
+document.querySelector('.tab-bar')?.addEventListener('keydown', event => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  const tabs = [...document.querySelectorAll('.tab')];
+  let index = tabs.indexOf(document.activeElement);
+  if (event.key === 'Home') index = 0;
+  else if (event.key === 'End') index = tabs.length - 1;
+  else index = (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  event.preventDefault();
+  tabs[index].focus();
+  tabs[index].click();
+});
+document.querySelectorAll('.tab-panel').forEach(panel => {
+  panel.setAttribute('role', 'tabpanel');
+  panel.setAttribute('aria-labelledby', panel.id.replace('panel', 'tab'));
+  panel.hidden = !panel.classList.contains('active');
 });
 
 // ── Original file listing ───────────────────────────────────
@@ -176,7 +217,8 @@ async function run(label, fn) {
     const result = await fn();
     if (result?.stdout) log(result.stdout.trim());
     if (result?.stderr) log(result.stderr.trim(), 'warn');
-    log(`${label} finished.`);
+    if (result?.queued) log(`${label} queued as ${result.transferId}.`, 'success');
+    else log(`${label} finished.`);
     await refreshStatus();
     await refreshHistory();
   } catch (err) {
@@ -186,8 +228,6 @@ async function run(label, fn) {
 }
 
 // ── Sync Dashboard ──────────────────────────────────────────
-
-let syncStarted = false;
 
 async function refreshSyncDashboard() {
   try {
@@ -216,8 +256,11 @@ async function refreshSyncDashboard() {
     // Sync engine state
     const engineState = await api.syncEngine.getState();
     if (engineState) {
-      $('syncIcon').textContent = engineState.isRunning ? '🔄' : (syncStarted ? '▶' : '⏸');
-      $('syncStatusText').textContent = engineState.isRunning ? 'Syncing…' : syncStarted ? 'Active' : 'Idle';
+      activityState.engineActive = Boolean(engineState.engineActive);
+      $('syncIcon').textContent = engineState.isRunning ? '🔄' : (engineState.engineActive ? '▶' : '⏸');
+      $('syncStatusText').textContent = engineState.isRunning ? 'Syncing…' : engineState.engineActive ? 'Active' : 'Stopped';
+      updateSyncIndicator(Boolean(engineState.isRunning), $('syncStatusText').textContent);
+      updateActivityBar();
     }
 
     // Pending items list
@@ -231,8 +274,7 @@ async function refreshSyncDashboard() {
       pendingList.innerHTML = '';
       for (const item of pendingItems) {
         const row = document.createElement('div');
-        row.className = 'file-row';
-        row.style.gridTemplateColumns = '1fr auto';
+        row.className = 'file-row compact';
         const name = document.createElement('span');
         name.textContent = item.remote_path;
         const state = document.createElement('span');
@@ -251,8 +293,7 @@ $('syncStartBtn').addEventListener('click', async () => {
   const mode = $('syncModeSelect').value;
   const interval = parseInt($('pollIntervalSelect').value, 10);
   try {
-    await api.syncEngine.start(mode, null, interval);
-    syncStarted = true;
+    await api.syncEngine.start(mode, state.localFolder, interval);
     log(`Sync started: mode=${mode}, interval=${interval}ms`);
     refreshSyncDashboard();
   } catch (err) { log(`Sync start error: ${err.message}`, 'error'); }
@@ -261,7 +302,7 @@ $('syncStartBtn').addEventListener('click', async () => {
 $('syncStopBtn').addEventListener('click', async () => {
   try {
     await api.syncEngine.stop();
-    syncStarted = false;
+
     log('Sync stopped');
     refreshSyncDashboard();
   } catch (err) { log(`Sync stop error: ${err.message}`, 'error'); }
@@ -271,7 +312,11 @@ $('syncScanNowBtn').addEventListener('click', async () => {
   log('Running sync scan…');
   try {
     const result = await api.syncEngine.scanNow();
-    log(`Sync scan complete: ${result.queued || 0} queued, ${result.remaining || 0} remaining`);
+    if (result?.ok === false || result?.skipped) {
+      log(`Sync scan not completed: ${result.reason || 'remote state unavailable'}`, 'warn');
+    } else {
+      log(`Sync scan complete: ${result.queued || 0} queued, ${result.remaining || 0} remaining`);
+    }
     refreshSyncDashboard();
   } catch (err) { log(`Sync scan error: ${err.message}`, 'error'); }
 });
@@ -302,28 +347,31 @@ async function refreshConflicts() {
       const info = document.createElement('div');
       const localSize = conflict.localSize ? formatBytes(conflict.localSize) : '—';
       const remoteSize = conflict.remoteSize ? formatBytes(conflict.remoteSize) : '—';
-      info.innerHTML = `
-        <div class="conflict-type">${conflict.type}</div>
-        <div class="conflict-path">${conflict.remotePath}</div>
-        <div class="conflict-reason">${conflict.reason}</div>
-        <details class="conflict-diff">
-          <summary>Show metadata diff</summary>
-          <div class="diff-container">
-            <div class="diff-side local">
-              <div class="diff-header">Local</div>
-              <div class="diff-item"><strong>Size:</strong> ${localSize}</div>
-              <div class="diff-item"><strong>Modified:</strong> ${formatWhen(conflict.localModified)}</div>
-              <div class="diff-item"><strong>Hash:</strong> ${(conflict.localHash || '—').slice(0, 16)}</div>
-            </div>
-            <div class="diff-side remote">
-              <div class="diff-header">Remote</div>
-              <div class="diff-item"><strong>Size:</strong> ${remoteSize}</div>
-              <div class="diff-item"><strong>Modified:</strong> ${formatWhen(conflict.remoteModified)}</div>
-              <div class="diff-item"><strong>Hash:</strong> ${(conflict.remoteHash || '—').slice(0, 16)}</div>
-            </div>
-          </div>
-        </details>
-      `;
+      info.append(
+        makeElement('div', 'conflict-type', conflict.type),
+        makeElement('div', 'conflict-path', conflict.remotePath),
+        makeElement('div', 'conflict-reason', conflict.reason)
+      );
+      const details = makeElement('details', 'conflict-diff');
+      details.append(makeElement('summary', '', 'Show metadata diff'));
+      const diff = makeElement('div', 'diff-container');
+      const local = makeElement('div', 'diff-side local');
+      local.append(
+        makeElement('div', 'diff-header', 'Local'),
+        makeElement('div', 'diff-item', `Size: ${localSize}`),
+        makeElement('div', 'diff-item', `Modified: ${formatWhen(conflict.localModified)}`),
+        makeElement('div', 'diff-item', `Hash: ${(conflict.localHash || '—').slice(0, 16)}`)
+      );
+      const remote = makeElement('div', 'diff-side remote');
+      remote.append(
+        makeElement('div', 'diff-header', 'Remote'),
+        makeElement('div', 'diff-item', `Size: ${remoteSize}`),
+        makeElement('div', 'diff-item', `Modified: ${formatWhen(conflict.remoteModified)}`),
+        makeElement('div', 'diff-item', `Hash: ${(conflict.remoteHash || '—').slice(0, 16)}`)
+      );
+      diff.append(local, remote);
+      details.append(diff);
+      info.append(details);
       const actions = document.createElement('div');
       actions.className = 'conflict-actions';
       ['keep_local', 'keep_remote', 'keep_both', 'skip'].forEach(strategy => {
@@ -368,7 +416,9 @@ async function refreshQueue() {
       for (const a of queueState.active) {
         const row = document.createElement('div');
         row.className = 'queue-row';
-        row.innerHTML = `<span class="badge running">${a.action}</span><span>${a.id}</span><button class="secondary" onclick="cancelTransfer('${a.id}')">Cancel</button>`;
+        const cancel = makeElement('button', 'secondary', 'Cancel');
+        cancel.addEventListener('click', () => window.cancelTransfer(a.id));
+        row.append(makeElement('span', 'badge running', a.action), makeElement('span', '', a.id), cancel);
         activeContainer.append(row);
       }
     }
@@ -384,7 +434,9 @@ async function refreshQueue() {
       for (const p of queueState.pending) {
         const row = document.createElement('div');
         row.className = 'queue-row';
-        row.innerHTML = `<span class="badge pending">${p.action}</span><span>${p.priority}</span><button class="secondary" onclick="cancelTransfer('${p.id}')">Cancel</button>`;
+        const cancel = makeElement('button', 'secondary', 'Cancel');
+        cancel.addEventListener('click', () => window.cancelTransfer(p.id));
+        row.append(makeElement('span', 'badge pending', p.action), makeElement('span', '', p.priority), cancel);
         pendingContainer.append(row);
       }
     }
@@ -401,7 +453,11 @@ async function refreshQueue() {
         const row = document.createElement('div');
         row.className = 'queue-row';
         const statusClass = c.status === 'succeeded' ? 'succeeded' : 'failed';
-        row.innerHTML = `<span class="badge ${statusClass}">${c.action}</span><span>${c.status}</span><small>${formatWhen(c.completedAt)}</small>`;
+        row.append(
+          makeElement('span', `badge ${statusClass}`, c.action),
+          makeElement('span', '', c.status),
+          makeElement('small', '', formatWhen(c.completedAt))
+        );
         completedContainer.append(row);
       }
     }
@@ -465,7 +521,9 @@ async function refreshFuse() {
     $('fuseUnmountBtn').disabled = !status.canUnmount;
 
     if (!status.isFuseAvailable) {
-      log('FUSE is not available on this system. Install fuse3 package.', 'warn');
+      const reason = status.capabilityReason || 'FUSE is unavailable on this system.';
+      errorEl.textContent = reason;
+      errorEl.classList.remove('hidden');
     }
   } catch (err) {
     log(`FUSE refresh error: ${err.message}`, 'error');
@@ -498,22 +556,27 @@ $('fuseRefreshBtn').addEventListener('click', refreshFuse);
 let lastUpdateCheck = null;
 let updateCheckedThisSession = false;
 
+function renderUpdateBanner(banner, title, detail, body = '') {
+  banner.replaceChildren();
+  banner.append(makeElement('strong', '', title));
+  if (detail) banner.append(document.createElement('br'), makeElement('span', '', detail));
+  if (body) banner.append(makeElement('p', '', body));
+}
+
 async function refreshUpdates() {
   showStatus('info', 'Checking for updates…');
   try {
     const result = await api.update.check();
     updateCheckedThisSession = true;
     lastUpdateCheck = result;
+    if (result.currentVersion) $('updateCurrentVersion').textContent = result.currentVersion;
     $('updateLatestVersion').textContent = result.latestVersion || (result.update?.version) || '—';
 
     const banner = $('updateBanner');
     if (result.hasUpdate) {
       banner.className = 'update-banner';
-      banner.innerHTML = `
-        <strong style="font-size:16px">✓ Update available: v${result.update.version}</strong><br/>
-        <span>${formatWhen(result.update.publishedAt)}</span>
-        ${result.update.body ? `<p style="margin-top:6px;opacity:.8">${result.update.body.slice(0, 300)}</p>` : ''}
-      `;
+      renderUpdateBanner(banner, `✓ Update available: v${result.update.version}`,
+        formatWhen(result.update.publishedAt), result.update.body ? result.update.body.slice(0, 300) : '');
       $('updateDownloadBtn').classList.remove('hidden');
       $('updateApplyBtn').classList.add('hidden');
       $('updateInstallHelp').classList.add('hidden');
@@ -523,7 +586,7 @@ async function refreshUpdates() {
       if (isNetworkError) {
         $('updateLatestVersion').textContent = '⚠ Offline';
         banner.className = 'update-banner info';
-        banner.innerHTML = `<strong>⚠ You're offline</strong><br/><span>Can't check for updates. Connect to the internet and try again.</span>`;
+        renderUpdateBanner(banner, "⚠ You're offline", "Can't check for updates. Connect to the internet and try again.");
       } else {
         showStatus('error', `Update check failed: ${result.error}`);
       }
@@ -531,8 +594,8 @@ async function refreshUpdates() {
       $('updateApplyBtn').classList.add('hidden');
     } else {
       banner.className = 'update-banner';
-      banner.innerHTML = `<strong>✓ You're up to date</strong><br/>
-        <span>Installed v${result.currentVersion || '0.3.0'} — latest is v${result.latestVersion || '0.3.0'}</span>`;
+      renderUpdateBanner(banner, "✓ You're up to date",
+        `Installed v${result.currentVersion || 'unknown'} · latest is v${result.latestVersion || 'unknown'}`);
       $('updateDownloadBtn').classList.add('hidden');
       $('updateApplyBtn').classList.add('hidden');
       $('updateInstallHelp').classList.add('hidden');
@@ -551,15 +614,6 @@ function showStatus(type, text) {
   $('updateResult').classList.remove('hidden');
 }
 
-// Auto-check on first tab switch to Updates
-const _origSwitchTab = switchTab;
-switchTab = function(name) {
-  _origSwitchTab(name);
-  if (name === 'updates' && !updateCheckedThisSession) {
-    refreshUpdates();
-  }
-};
-
 $('updateCheckBtn').addEventListener('click', refreshUpdates);
 
 $('updateDownloadBtn').addEventListener('click', async () => {
@@ -567,20 +621,22 @@ $('updateDownloadBtn').addEventListener('click', async () => {
     $('updateDownloadBtn').textContent = 'Downloading…';
     $('updateDownloadBtn').disabled = true;
     $('updateProgress').classList.remove('hidden');
-    $('progressFill').style.width = '0%';
+    $('progressFill').classList.remove('complete');
     $('updateProgressText').textContent = 'Starting download…';
 
     const available = lastUpdateCheck?.update || await api.update.getAvailable();
     if (!available) {
       showStatus('error', 'No update available. Click "Check for updates" first.');
       $('updateProgress').classList.add('hidden');
+      $('updateDownloadBtn').textContent = 'Download update';
+      $('updateDownloadBtn').disabled = false;
       return;
     }
 
     // Real progress tracking from download response
     const downloaded = await api.update.download(available);
 
-    $('progressFill').style.width = '100%';
+    $('progressFill').classList.add('complete');
     $('updateProgressText').textContent = 'Download complete!';
     setTimeout(() => {
       $('updateProgress').classList.add('hidden');
@@ -605,10 +661,8 @@ $('updateDownloadBtn').addEventListener('click', async () => {
     }
     helpEl.classList.remove('hidden');
 
-    $('updateBanner').innerHTML = `
-      <strong>✓ Downloaded</strong><br/>
-      <span>${downloaded.name} (${(downloaded.size / 1024 / 1024).toFixed(1)} MB)</span>
-    `;
+    renderUpdateBanner($('updateBanner'), '✓ Downloaded and verified',
+      `${downloaded.name} (${(downloaded.size / 1024 / 1024).toFixed(1)} MB)`);
   } catch (err) {
     $('updateProgress').classList.add('hidden');
     showStatus('error', `Download failed: ${err.message}`);
@@ -624,10 +678,8 @@ $('updateApplyBtn').addEventListener('click', async () => {
     if (!asset) { showStatus('error', 'No downloaded asset to apply. Download first.'); return; }
     const result = await api.update.apply(asset);
     log(`Update ready: ${result.method}`);
-    $('updateBanner').innerHTML = `
-      <strong>✓ Ready to install</strong><br/>
-      <span>${result.instruction || 'Restart the app to use the new version.'}</span>
-    `;
+    renderUpdateBanner($('updateBanner'), '✓ Ready to install',
+      result.instruction || 'Restart the app to use the new version.');
     // Show the install instructions again for reference
     const helpText = $('updateInstallText');
     if (result.instruction) helpText.textContent = result.instruction;
@@ -640,25 +692,156 @@ $('updateApplyBtn').addEventListener('click', async () => {
 
 // ── Live event subscriptions ────────────────────────────────
 
-api.onProgress(({ stream, text }) => log(text.trim(), stream === 'stderr' ? 'warn' : 'info'));
+let autoRefreshTimer = null;
+const AUTO_REFRESH_MS = 5000; // 5 seconds
+let currentTab = 'files';
+let activityState = { syncing: false, uploading: 0, downloading: 0, lastSync: '—', engineActive: false };
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) return;
+  autoRefreshTimer = setInterval(() => {
+    refreshCurrentTab();
+  }, AUTO_REFRESH_MS);
+}
+
+async function refreshCurrentTab() {
+  try {
+    // Always keep CLI status fresh
+    await refreshStatus();
+    switch (currentTab) {
+      case 'sync': refreshSyncDashboard(); break;
+      case 'conflicts': refreshConflicts(); break;
+      case 'queue': refreshQueue(); break;
+      case 'fuse': refreshFuse(); break;
+    }
+  } catch { /* silent — background refresh shouldn't spam */ }
+}
+
+// ── Live activity bar ─────────────────────────────────────
+
+function updateActivityBar() {
+  const bar = $('activityBar');
+  if (!bar) return;
+  const { syncing, uploading, downloading, lastSync, engineActive } = activityState;
+
+  if (uploading > 0 || downloading > 0) {
+    bar.className = 'activity-bar active';
+    const parts = [];
+    if (uploading > 0) parts.push(`↑ ${uploading} uploading`);
+    if (downloading > 0) parts.push(`↓ ${downloading} downloading`);
+    bar.textContent = `🔄 ${parts.join(' · ')}`;
+  } else if (syncing) {
+    bar.className = 'activity-bar active';
+    bar.textContent = '🔄 Scanning for changes…';
+  } else if (engineActive) {
+    bar.className = 'activity-bar';
+    bar.textContent = `✓ All synced · Last sync: ${lastSync}`;
+  } else {
+    bar.className = 'activity-bar';
+    bar.textContent = 'Sync stopped';
+  }
+}
+
+// ── Sync indicator in header ──────────────────────────────
+
+function updateSyncIndicator(isRunning, statusText) {
+  const indicator = $('syncIndicator');
+  if (!indicator) return;
+  $('syncIcon').textContent = isRunning ? '🔄' : '▶';
+  $('syncStatusText').textContent = statusText || (isRunning ? 'Syncing' : 'Idle');
+  indicator.className = 'sync-indicator' + (isRunning ? ' syncing' : '');
+}
+
+// ── Toast notifications ───────────────────────────────────
+
+function showToast(message, type = 'info', duration = 4000) {
+  const container = $('toastContainer');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+// ── IPC event handlers ────────────────────────────────────
+
+api.onProgress((payload = {}) => {
+  const { stream, text, action } = payload;
+  const message = typeof text === 'string' ? text.trim() : '';
+  if (message) log(message, stream === 'stderr' ? 'warn' : 'info');
+  // Update activity counts from progress lines
+  if ((message && message.includes('%')) || Number.isFinite(payload.percent)) {
+    activityState.syncing = true;
+    activityState.uploading = message.includes('Upload') || message.includes('upload') || action === 'upload' ? 1 : activityState.uploading;
+    activityState.downloading = message.includes('Download') || message.includes('download') || action === 'download' ? 1 : activityState.downloading;
+    updateActivityBar();
+  }
+});
+
 api.onTransferComplete((payload) => {
   log(`Transfer complete: ${payload.action}`, 'info');
+  activityState.syncing = false;
+  activityState.uploading = 0;
+  activityState.downloading = 0;
+  activityState.lastSync = new Date().toLocaleTimeString();
+  updateActivityBar();
+  refreshSyncDashboard().catch(() => {});
+  showToast(`✓ ${payload.action} completed`, 'success');
   refreshHistory();
   refreshQueue();
+  // Refresh file list if on Files tab
+  if (currentTab === 'files') refreshFiles().catch(() => {});
 });
+
 api.onTransferError((payload) => {
   log(`Transfer error: ${payload.action} — ${payload.error}`, 'error');
+  activityState.uploading = 0;
+  activityState.downloading = 0;
+  updateActivityBar();
+  showToast(`✗ ${payload.error}`, 'error', 6000);
   refreshQueue();
 });
-api.onSyncComplete((payload) => {
-  refreshSyncDashboard();
-  refreshConflicts();
+
+api.onExternalDownloadFolder((payload) => {
+  if (!payload?.localFolder) return;
+  state.localFolder = payload.localFolder;
+  $('localFolderInput').value = payload.localFolder;
+  showToast('Download folder selected from your file manager.', 'success');
 });
+
+api.onSyncComplete((payload) => {
+  log(payload.verified ? 'Sync completed and verified.' : 'Sync scan completed.', 'info');
+  activityState.lastSync = new Date().toLocaleTimeString();
+  activityState.syncing = false;
+  updateActivityBar();
+  refreshSyncDashboard().catch(() => {});
+  refreshConflicts().catch(() => {});
+});
+
 api.onSyncError((payload) => {
   log(`Sync error: ${payload.message}`, 'error');
+  activityState.syncing = false;
+  updateActivityBar();
+  showToast(`✗ Sync error: ${payload.message}`, 'error', 6000);
 });
-api.onLocalChange((payload) => log(`Local change: ${payload.type} ${payload.path}`, 'info'));
-api.onRemoteChange((payload) => log(`Remote change: ${payload.type} ${payload.path}`, 'info'));
+
+api.onLocalChange((payload) => {
+  log(`Local change: ${payload.type} ${payload.path}`, 'info');
+  activityState.syncing = true;
+  updateActivityBar();
+  updateSyncIndicator(true, 'Scanning');
+});
+
+api.onRemoteChange((payload) => {
+  log(`Remote change: ${payload.type} ${payload.path}`, 'info');
+  activityState.syncing = true;
+  updateActivityBar();
+});
 
 // ── Original button handlers ────────────────────────────────
 
@@ -677,12 +860,15 @@ $('chooseFolderBtn').addEventListener('click', async () => {
 });
 $('localFolderInput').addEventListener('input', (event) => { state.localFolder = event.target.value; });
 $('openFolderBtn').addEventListener('click', () => api.openFolder(state.localFolder));
-$('downloadAllBtn').addEventListener('click', () => run('Download all', () => api.downloadAll({
-  paths: state.items.length ? state.items.map(i => remotePathForName(i.name)) : ['/my-files'],
-  localFolder: state.localFolder,
-  fileConflictStrategy: 'skip',
-  folderConflictStrategy: 'merge'
-})));
+$('downloadAllBtn').addEventListener('click', () => {
+  if (!state.items.length) return log('Refresh the remote file list before downloading everything.', 'warn');
+  return run('Download all', () => api.downloadAll({
+    paths: state.items.map(i => remotePathForName(i.name)),
+    localFolder: state.localFolder,
+    fileConflictStrategy: 'skip',
+    folderConflictStrategy: 'merge'
+  }));
+});
 $('downloadSelectedBtn').addEventListener('click', () => {
   const paths = [...state.selected].map(remotePathForName);
   if (!paths.length) return log('Nothing selected.', 'warn');
@@ -709,6 +895,8 @@ $('runBackupProfileBtn').addEventListener('click', () => run('Run backup profile
 // ── Boot ────────────────────────────────────────────────────
 
 async function boot() {
+  const appVersion = await api.getAppVersion();
+  $('updateCurrentVersion').textContent = appVersion;
   state.localFolder = await api.getDefaultLocalFolder();
   $('localFolderInput').value = state.localFolder;
   await refreshHistory();

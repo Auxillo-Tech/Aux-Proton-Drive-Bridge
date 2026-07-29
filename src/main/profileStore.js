@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { sanitizeForStorage } = require('./operationStore');
+
 
 const PROFILE_NAMESPACE = 'sync-profiles';
 
@@ -22,22 +22,27 @@ const DEFAULT_PROFILE = Object.freeze({
 
 function normalizeProfile(input = {}) {
   const now = new Date().toISOString();
-  const localPaths = Array.isArray(input.localPaths) ? input.localPaths.map(String).filter(Boolean) : [];
+  const localPaths = Array.isArray(input.localPaths)
+    ? input.localPaths.slice(0, 1000).map(value => String(value).slice(0, 4096)).filter(Boolean)
+    : [];
+  const requestedInterval = Number(input.pollIntervalMs);
+  const pollIntervalMs = Number.isFinite(requestedInterval)
+    ? Math.min(24 * 60 * 60_000, Math.max(5000, Math.trunc(requestedInterval)))
+    : 60000;
   const profile = {
     ...DEFAULT_PROFILE,
-    ...sanitizeForStorage(input),
-    id: String(input.id || `profile_${Date.now()}`),
-    name: String(input.name || 'Unnamed profile'),
+    id: String(input.id || `profile_${Date.now()}`).slice(0, 128),
+    name: String(input.name || 'Unnamed profile').slice(0, 200),
     mode: ['conservative', 'one-way-upload', 'one-way-download', 'bidirectional'].includes(input.mode) ? input.mode : 'conservative',
     enabled: Boolean(input.enabled),
     localPaths,
-    remoteParentPath: String(input.remoteParentPath || '/my-files'),
-    localFolder: String(input.localFolder || ''),
+    remoteParentPath: String(input.remoteParentPath || '/my-files').slice(0, 4096),
+    localFolder: String(input.localFolder || '').slice(0, 4096),
     fileConflictStrategy: input.fileConflictStrategy === 'replace' || input.fileConflictStrategy === 'keep-both' ? input.fileConflictStrategy : 'skip',
     folderConflictStrategy: input.folderConflictStrategy === 'replace' || input.folderConflictStrategy === 'keep-both' || input.folderConflictStrategy === 'skip' ? input.folderConflictStrategy : 'merge',
     deletePropagation: false,
-    pollIntervalMs: Math.max(5000, Number(input.pollIntervalMs) || 60000),
-    createdAt: input.createdAt || now,
+    pollIntervalMs,
+    createdAt: typeof input.createdAt === 'string' ? input.createdAt.slice(0, 64) : now,
     updatedAt: now
   };
   return profile;
@@ -68,13 +73,13 @@ function createProfileStore(filePath) {
   function getDefaultBackupProfile() {
     const raw = loadRaw();
     if (!raw.defaultBackup) return { ...DEFAULT_PROFILE, id: 'default-backup', name: 'Default one-way backup', mode: 'one-way-upload' };
-    return normalizeProfile(raw.defaultBackup);
+    return normalizeProfile({ ...raw.defaultBackup, id: 'default-backup', name: 'Default one-way backup' });
   }
 
   function saveDefaultBackupProfile(profile) {
     const raw = loadRaw();
     raw.version = 2;
-    raw.defaultBackup = normalizeProfile({ ...getDefaultBackupProfile(), ...profile });
+    raw.defaultBackup = normalizeProfile({ ...getDefaultBackupProfile(), ...profile, id: 'default-backup', name: 'Default one-way backup' });
     saveRaw(raw);
     return raw.defaultBackup;
   }
@@ -82,14 +87,16 @@ function createProfileStore(filePath) {
   // Multi-profile support
   function listProfiles() {
     const raw = loadRaw();
-    const profiles = Array.isArray(raw[PROFILE_NAMESPACE]) ? raw[PROFILE_NAMESPACE] : [];
+    const profiles = (Array.isArray(raw[PROFILE_NAMESPACE]) ? raw[PROFILE_NAMESPACE] : [])
+      .slice(0, 100)
+      .map(profile => normalizeProfile(profile && typeof profile === 'object' ? profile : {}));
     // Include legacy as first profile if it exists
     if (raw.defaultBackup) {
       const legacy = normalizeProfile({ ...raw.defaultBackup, id: 'default-backup', name: 'Default one-way backup' });
       const alreadyListed = profiles.some(p => p.id === 'default-backup');
       if (!alreadyListed) profiles.unshift(legacy);
     }
-    return profiles;
+    return profiles.filter((profile, index, all) => all.findIndex(candidate => candidate.id === profile.id) === index);
   }
 
   function getProfile(id) {

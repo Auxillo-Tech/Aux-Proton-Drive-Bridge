@@ -20,7 +20,7 @@
           <p class="subtitle">Unofficial Linux desktop bridge powered by Proton's official Drive CLI.</p>
         </div>
       </div>
-      <div class="status-card">
+      <div class="status-card" role="status" aria-live="polite">
         <span id="statusDot" class="dot"></span>
         <div>
           <strong id="statusText">Checking CLI…</strong>
@@ -33,14 +33,20 @@
       </div>
     </header>
 
+    <!-- Live activity bar -->
+    <div id="activityBar" class="activity-bar" role="status" aria-live="polite">✓ Loading…</div>
+
+    <!-- Toast container -->
+    <div id="toastContainer" class="toast-container" aria-live="assertive"></div>
+
     <!-- Tab navigation -->
-    <nav class="tab-bar">
-      <button id="tabFiles" class="tab active">Files</button>
-      <button id="tabSync" class="tab">Sync</button>
-      <button id="tabConflicts" class="tab">Conflicts <span id="conflictBadge" class="badge-count hidden">0</span></button>
-      <button id="tabQueue" class="tab">Queue</button>
-      <button id="tabFuse" class="tab">FUSE Mount</button>
-      <button id="tabUpdates" class="tab">Updates</button>
+    <nav class="tab-bar" role="tablist" aria-label="Bridge sections">
+      <button id="tabFiles" class="tab active" role="tab" aria-controls="panelFiles" aria-selected="true" tabindex="0">Files</button>
+      <button id="tabSync" class="tab" role="tab" aria-controls="panelSync" aria-selected="false" tabindex="-1">Sync</button>
+      <button id="tabConflicts" class="tab" role="tab" aria-controls="panelConflicts" aria-selected="false" tabindex="-1">Conflicts <span id="conflictBadge" class="badge-count hidden">0</span></button>
+      <button id="tabQueue" class="tab" role="tab" aria-controls="panelQueue" aria-selected="false" tabindex="-1">Queue</button>
+      <button id="tabFuse" class="tab" role="tab" aria-controls="panelFuse" aria-selected="false" tabindex="-1">FUSE Mount</button>
+      <button id="tabUpdates" class="tab" role="tab" aria-controls="panelUpdates" aria-selected="false" tabindex="-1">Updates</button>
     </nav>
 
     <!-- Tab: Files (original UI) -->
@@ -135,7 +141,7 @@
         </div>
       </section>
 
-      <section class="panel" style="margin-top:14px">
+      <section class="panel panel-spaced">
         <div class="panel-head">
           <h2>Pending sync items</h2>
           <button id="syncRefreshBtn" class="secondary">Refresh</button>
@@ -203,7 +209,7 @@
           <button id="fuseUnmountBtn" class="wide secondary">Unmount</button>
           <button id="fuseRefreshBtn" class="wide secondary">Refresh status</button>
         </div>
-        <div class="note" style="margin-top:14px">
+        <div class="note">
           <strong>Note:</strong> FUSE support requires the proton-drive CLI to have mount capabilities, or a compatible FUSE wrapper. Requires <code>/dev/fuse</code> and <code>fusermount3</code> installed.
         </div>
       </section>

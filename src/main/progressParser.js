@@ -100,6 +100,11 @@ function parseProgressLine(line, state = {}) {
   }
 
   // ── Generic "X of Y" ───────────────────────────────────────
+  const skippedMatch = trimmed.match(/^Skipped:\s*(?:(\d+)\b|(.+))$/i);
+  if (skippedMatch) {
+    return { type: 'skipped', count: skippedMatch[1] ? Number(skippedMatch[1]) : 1, detail: skippedMatch[2]?.trim() || null };
+  }
+
   const ofMatch = trimmed.match(/^(\d+)\s+of\s+(\d+)\s+items?/i);
   if (ofMatch) {
     return {
@@ -124,6 +129,8 @@ function summarizeTransfer(lines) {
   const errors = [];
   let lastPct = 0;
   let currentFile = '';
+  const skipped = [];
+  let totalSkipped = 0;
 
   for (const line of (lines || [])) {
     const parsed = parseProgressLine(line);
@@ -140,6 +147,10 @@ function summarizeTransfer(lines) {
         if (parsed.pct !== undefined && parsed.pct > lastPct) lastPct = parsed.pct;
         if (parsed.name) currentFile = parsed.name;
         break;
+      case 'skipped':
+        totalSkipped += parsed.count;
+        if (parsed.detail) skipped.push(parsed.detail);
+        break;
     }
   }
 
@@ -149,7 +160,9 @@ function summarizeTransfer(lines) {
     lastProgress: lastPct,
     currentFile,
     totalCompleted: completed.length,
-    totalErrors: errors.length
+    totalErrors: errors.length,
+    skipped,
+    totalSkipped
   };
 }
 

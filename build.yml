@@ -1,16 +1,30 @@
 appId: tech.auxillo.auxprotondrivebridge
 productName: Aux Proton Drive Bridge
-artifactName: ${productName}-${version}-${arch}.${ext}
+artifactName: Aux.Proton.Drive.Bridge-${version}-${arch}.${ext}
 directories:
   output: dist
   buildResources: assets
+afterPack: scripts/after-pack.js
 files:
   - src/**/*
   - assets/**/*
+  - '!assets/icon-source.png'
   - package.json
   - README.md
+  - LICENSE
+  - THIRD_PARTY_NOTICES.md
+  - "!node_modules/better-sqlite3/prebuilds/{win32-x64.node,win32-arm64.node,linuxmusl-x64.node,linuxmusl-arm64.node,linux-arm64.node,darwin-x64.node,darwin-arm64.node}"
+  - "!node_modules/better-sqlite3/src/**/*"
+  - "!node_modules/better-sqlite3/deps/**/*"
 asar: true
 compression: normal
+extraResources:
+  - from: scripts/install-file-manager-integration.sh
+    to: integration/install-file-manager-integration.sh
+  - from: assets
+    to: integration/assets
+    filter:
+      - icon-*.png
 linux:
   target:
     - AppImage
@@ -19,11 +33,15 @@ linux:
   category: Network
   executableName: aux-proton-drive-bridge
   icon: assets/icon.png
-deb:
-  depends:
-    - libsecret-1-0
-    - xdg-utils
+deb: {}
 rpm:
   depends:
-    - libsecret
+    - gtk3
+    - libnotify
+    - nss
+    - libXScrnSaver
+    - (libXtst or libXtst6)
     - xdg-utils
+    - at-spi2-core
+    - (libuuid or libuuid1)
+    - libsecret

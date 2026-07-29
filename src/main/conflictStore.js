@@ -24,7 +24,8 @@ const CONFLICT_TYPES = Object.freeze({
   BOTH_CREATE: 'both_create',
   TYPE_MISMATCH: 'type_mismatch',
   SIZE_MISMATCH: 'size_mismatch',
-  HASH_MISMATCH: 'hash_mismatch'
+  HASH_MISMATCH: 'hash_mismatch',
+  TRANSFER_SKIPPED: 'transfer_skipped'
 });
 
 const RESOLUTION_STRATEGIES = Object.freeze({
@@ -43,6 +44,12 @@ const RESOLUTION_STRATEGIES = Object.freeze({
  */
 function createConflictStore(syncDb) {
   const activeConflicts = new Map(); // fileId -> { conflict record }
+
+  if (syncDb?.listConflictRecords) {
+    for (const row of syncDb.listConflictRecords('open')) {
+      if (row.conflict?.id) activeConflicts.set(row.conflict.id, row.conflict);
+    }
+  }
 
   /**
    * Detect conflicts between local and remote state for a file.
@@ -69,15 +76,15 @@ function createConflictStore(syncDb) {
 
     // Both modified — check size mismatch first when timestamps are within tolerance
     if (local && remote) {
-      const localChanged = hasChanged(local, lastSync);
-      const remoteChanged = hasChanged(remote, lastSync);
-      const preLocalSize = lastSync ? lastSync.size : 0;
+      const localChanged = hasChanged(local, lastSync, 'local');
+      const remoteChanged = hasChanged(remote, lastSync, 'remote');
+      const preLocalSize = lastSync ? (lastSync.syncedLocalSize ?? lastSync.synced_local_size ?? lastSync.localSize ?? lastSync.size) : 0;
 
       // Size mismatch: timestamps match but sizes differ significantly
       const sizeDelta = Math.abs((local.size || 0) - (remote.size || 0));
       if (sizeDelta > 64 && lastSync && lastSync.sync_state === 'synced') {
-        const localTimeOk = timesMatch(local, lastSync);
-        const remoteTimeOk = timesMatch(remote, lastSync);
+        const localTimeOk = timesMatch(local, lastSync, 'local');
+        const remoteTimeOk = timesMatch(remote, lastSync, 'remote');
         if (localTimeOk && remoteTimeOk) {
           return createConflict(local, remote, CONFLICT_TYPES.SIZE_MISMATCH,
             `Size mismatch: local ${local.size} vs remote ${remote.size} (was ${preLocalSize})`);
@@ -91,14 +98,14 @@ function createConflictStore(syncDb) {
     }
 
     // Local delete, remote modify
-    if (!local && remote && hasChanged(remote, lastSync)) {
+    if (!local && remote && hasChanged(remote, lastSync, 'remote')) {
       return createConflict(local || { path: lastSync.local_path, type: lastSync.type },
         remote, CONFLICT_TYPES.LOCAL_DELETE_REMOTE_MODIFY,
         'Local file deleted, remote was modified');
     }
 
     // Remote delete, local modify
-    if (local && !remote && hasChanged(local, lastSync)) {
+    if (local && !remote && hasChanged(local, lastSync, 'local')) {
       return createConflict(local, remote || { path: lastSync.remote_path, type: lastSync.type },
         CONFLICT_TYPES.REMOTE_DELETE_LOCAL_MODIFY,
         'Remote file deleted, local was modified');
@@ -107,25 +114,33 @@ function createConflictStore(syncDb) {
     return null;
   }
 
-  function hasChanged(current, lastSync) {
+  function hasChanged(current, lastSync, side) {
     if (!current || !lastSync) return true;
 
     const currentModified = new Date(current.modified || current.local_modified || current.remote_modified || 0).getTime();
-    const lastModified = new Date(lastSync.local_modified || lastSync.remote_modified || 0).getTime();
+    const lastModifiedValue = side === 'remote'
+      ? (lastSync.syncedRemoteModified ?? lastSync.synced_remote_modified ?? lastSync.remoteModified ?? lastSync.remote_modified)
+      : (lastSync.syncedLocalModified ?? lastSync.synced_local_modified ?? lastSync.localModified ?? lastSync.local_modified);
+    const lastModified = new Date(lastModifiedValue || 0).getTime();
 
     // Consider it changed if modified time differs by more than 2 seconds
     if (Math.abs(currentModified - lastModified) > 2000) return true;
 
-    // Consider it changed if size differs
-    if ((current.size || 0) !== (lastSync.size || 0)) return true;
+    const lastSize = side === 'remote'
+      ? (lastSync.syncedRemoteSize ?? lastSync.synced_remote_size ?? lastSync.remoteSize ?? lastSync.remote_size ?? lastSync.size)
+      : (lastSync.syncedLocalSize ?? lastSync.synced_local_size ?? lastSync.localSize ?? lastSync.local_size ?? lastSync.size);
+    if ((current.size || 0) !== (lastSize || 0)) return true;
 
     return false;
   }
 
-  function timesMatch(current, lastSync) {
+  function timesMatch(current, lastSync, side) {
     if (!current || !lastSync) return false;
     const currentModified = new Date(current.modified || current.local_modified || current.remote_modified || 0).getTime();
-    const lastModified = new Date(lastSync.local_modified || lastSync.remote_modified || 0).getTime();
+    const lastModifiedValue = side === 'remote'
+      ? (lastSync.syncedRemoteModified ?? lastSync.synced_remote_modified ?? lastSync.remoteModified ?? lastSync.remote_modified)
+      : (lastSync.syncedLocalModified ?? lastSync.synced_local_modified ?? lastSync.localModified ?? lastSync.local_modified);
+    const lastModified = new Date(lastModifiedValue || 0).getTime();
     return Math.abs(currentModified - lastModified) <= 2000;
   }
 
@@ -167,24 +182,41 @@ function createConflictStore(syncDb) {
     if (syncDb) {
       const fileId = syncDb.pathToId(conflict.remotePath);
       syncDb.recordConflict({
+        conflictId: conflict.id,
         fileId,
+        type: conflict.type,
         remotePath: conflict.remotePath,
         localPath: conflict.localPath,
         reason: conflict.reason,
         remoteModified: conflict.remoteModified,
         localModified: conflict.localModified,
+        remoteSize: conflict.remoteSize,
+        localSize: conflict.localSize,
         remoteHash: conflict.remoteHash,
-        localHash: conflict.localHash
+        localHash: conflict.localHash,
+        detectedAt: conflict.detectedAt
       });
     }
 
     return conflict.id;
   }
 
+  function recordTransferSkipped({ remotePath, localPath, action, summary, type = 'file' }) {
+    const conflict = createConflict(
+      localPath ? { path: localPath, type } : null,
+      { path: remotePath, type },
+      CONFLICT_TYPES.TRANSFER_SKIPPED,
+      `Proton Drive skipped the ${action} operation; the two sides may still differ`
+    );
+    conflict.transferSummary = summary || null;
+    record(conflict);
+    return conflict;
+  }
+
   /**
    * Resolve a conflict with a chosen strategy.
    */
-  function resolve(conflictId, strategy) {
+  function prepareResolution(conflictId, strategy) {
     const conflict = activeConflicts.get(conflictId);
     if (!conflict) return false;
 
@@ -192,6 +224,13 @@ function createConflictStore(syncDb) {
       throw new Error(`Invalid resolution strategy: ${strategy}`);
     }
 
+    return { conflict: { ...conflict }, nextAction: resolutionToAction(strategy, conflict), strategy };
+  }
+
+  function commitResolution(conflictId, strategy, options = {}) {
+    const prepared = prepareResolution(conflictId, strategy);
+    if (!prepared) return false;
+    const conflict = activeConflicts.get(conflictId);
     conflict.status = 'resolved';
     conflict.resolvedAt = new Date().toISOString();
     conflict.resolution = strategy;
@@ -199,20 +238,22 @@ function createConflictStore(syncDb) {
 
     // Update syncDb
     if (syncDb) {
-      syncDb.resolveConflict(conflict.remotePath, strategy);
+      syncDb.resolveConflict(conflict.remotePath, strategy, conflictId, options.transferCompleted ? 'synced' : null);
     }
 
-    // Generate appropriate sync action based on strategy
-    const nextAction = resolutionToAction(strategy, conflict);
-    return { conflict, nextAction };
+    return { conflict: { ...conflict }, nextAction: prepared.nextAction, strategy };
+  }
+
+  function resolve(conflictId, strategy) {
+    return commitResolution(conflictId, strategy);
   }
 
   function resolutionToAction(strategy, conflict) {
     switch (strategy) {
       case RESOLUTION_STRATEGIES.KEEP_LOCAL:
-        return { action: 'upload', paths: [conflict.localPath], parentPath: path.dirname(conflict.remotePath) };
+        return { action: 'upload', localPaths: [conflict.localPath], parentPath: path.dirname(conflict.remotePath), fileConflictStrategy: 'replace' };
       case RESOLUTION_STRATEGIES.KEEP_REMOTE:
-        return { action: 'download', paths: [conflict.remotePath], localFolder: path.dirname(conflict.localPath) };
+        return { action: 'download', paths: [conflict.remotePath], localFolder: path.dirname(conflict.localPath), fileConflictStrategy: 'replace' };
       case RESOLUTION_STRATEGIES.KEEP_BOTH:
         return { action: 'rename', localPath: conflict.localPath, remotePath: conflict.remotePath,
           newLocalName: addConflictSuffix(path.basename(conflict.localPath || 'file'), 'local'),
@@ -220,7 +261,7 @@ function createConflictStore(syncDb) {
       case RESOLUTION_STRATEGIES.OVERWRITE_LOCAL:
         return { action: 'download', paths: [conflict.remotePath], localFolder: path.dirname(conflict.localPath), fileConflictStrategy: 'replace' };
       case RESOLUTION_STRATEGIES.OVERWRITE_REMOTE:
-        return { action: 'upload', paths: [conflict.localPath], parentPath: path.dirname(conflict.remotePath), fileConflictStrategy: 'replace' };
+        return { action: 'upload', localPaths: [conflict.localPath], parentPath: path.dirname(conflict.remotePath), fileConflictStrategy: 'replace' };
       case RESOLUTION_STRATEGIES.SKIP:
         return { action: 'none' };
       default:
@@ -290,6 +331,9 @@ function createConflictStore(syncDb) {
   return {
     detect,
     record,
+    recordTransferSkipped,
+    prepareResolution,
+    commitResolution,
     resolve,
     listActive,
     listAll,

@@ -4,18 +4,18 @@ Aux Proton Drive Bridge is distributed as Linux release artifacts from GitHub Re
 
 Release page:
 
-<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.3.0>
+<https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/latest>
 
 > The repository/release may be private until Auxillo changes repository visibility to public.
 
-## Supported targets for v0.3.0
+## Supported targets for v0.3.1
 
 | Linux family | Recommended artifact | Notes |
 |---|---|---|
 | Debian / Ubuntu / Mint / Pop!_OS | `.deb` | Best native package for Debian-family systems. |
 | Fedora / RHEL / Rocky / Alma | `.rpm` | Best native package for Fedora/RHEL-family systems. |
 | openSUSE / SUSE | `.rpm` | Should install with `zypper`; verify on target distro. |
-| Arch / Manjaro / EndeavourOS | AppImage | AUR packaging is future work. |
+| Arch / Manjaro / EndeavourOS | AppImage or validated AUR metadata | AUR publication is handled separately. |
 | Other x64 Linux distros | AppImage | Best fallback. |
 
 ## Requirements
@@ -44,32 +44,38 @@ proton-drive filesystem list /my-files
 
 ## Verify downloaded release files
 
-Download `SHA256SUMS.txt` from the same release as the package, then verify from the folder containing the artifacts:
+Download `SHA256SUMS.txt` and `SHA256SUMS.txt.sig` from the same release as the package. Obtain `assets/release-public-key.pem` from the exact signed source tag, verify the Ed25519 signature, and then verify only the package you downloaded:
 
 ```bash
-sha256sum -c SHA256SUMS.txt
+openssl pkeyutl -verify -pubin -inkey assets/release-public-key.pem \
+  -rawin -in SHA256SUMS.txt -sigfile SHA256SUMS.txt.sig
+grep '  Aux.Proton.Drive.Bridge-0.3.1-amd64.deb$' SHA256SUMS.txt | sha256sum -c -
 ```
 
-Expected v0.3.0 assets:
+Expected v0.3.1 assets:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
-Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
-aux-proton-drive-bridge-0.3.0-source.tar.gz
-aux-proton-drive-bridge-0.3.0-source.zip
+Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.1-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm
+aux-proton-drive-bridge-0.3.1-source.tar.gz
+aux-proton-drive-bridge-0.3.1-source.zip
+aux-proton-drive-bridge-0.3.1-aur.tar.gz
+latest-linux.yml
 SHA256SUMS.txt
+SHA256SUMS.txt.sig
 release-manifest.json
+sbom.cdx.json
 ```
 
-Release assets also include GPG signatures (`.asc`) and/or signify signatures (`.sig`) when published.
+The application updater requires the same valid Ed25519 signature before it accepts a checksum manifest.
 
 ## Install on Debian / Ubuntu / Mint / Pop!_OS
 
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.1-amd64.deb
 ```
 
 Option A - graphical install:
@@ -81,13 +87,13 @@ Option A - graphical install:
 Option B - terminal install:
 
 ```bash
-sudo apt install ./Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
+sudo apt install ./Aux.Proton.Drive.Bridge-0.3.1-amd64.deb
 ```
 
 If using `dpkg` directly:
 
 ```bash
-sudo dpkg -i ./Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
+sudo dpkg -i ./Aux.Proton.Drive.Bridge-0.3.1-amd64.deb
 sudo apt -f install
 ```
 
@@ -102,13 +108,13 @@ sudo apt remove aux-proton-drive-bridge
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm
 ```
 
 Install:
 
 ```bash
-sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm
 ```
 
 Launch **Aux Proton Drive Bridge** from the application menu.
@@ -126,13 +132,13 @@ Download the `.rpm` asset.
 Install:
 
 ```bash
-sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm
 ```
 
 or on older systems:
 
 ```bash
-sudo yum install ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+sudo yum install ./Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm
 ```
 
 ## Install on openSUSE
@@ -142,40 +148,50 @@ Download the `.rpm` asset.
 Install:
 
 ```bash
-sudo zypper install ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+sudo zypper install ./Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm
 ```
 
 ## Install on Arch / Manjaro / EndeavourOS
 
-Use the AppImage for v0.3.0.
+Use the AppImage directly, or download and extract `aux-proton-drive-bridge-0.3.1-aur.tar.gz` from the release. The archive contains the validated `PKGBUILD`, native `.SRCINFO`, and license file needed by `makepkg`.
 
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage
 ```
 
 Make it executable:
 
 ```bash
-chmod +x ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+chmod +x ./Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage
 ```
 
 Run:
 
 ```bash
-./Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage
 ```
 
-Future work: AUR package.
+AUR metadata is validated in an Arch container for each release. Publishing it to the AUR is a separate maintainer action.
+
+## Install file manager actions
+
+After installing the DEB or RPM, run:
+
+```bash
+aux-proton-drive-bridge --install-file-manager-integration
+```
+
+For the AppImage, pass the same flag to its saved AppImage path. This installs user-local Nautilus, Dolphin, and Thunar actions plus icons under `~/.local`.
 
 ## Install on other Linux distributions
 
 Use the AppImage.
 
 ```bash
-chmod +x ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
-./Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+chmod +x ./Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage
 ```
 
 If AppImage does not launch because FUSE is missing, see [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
@@ -193,7 +209,7 @@ Requirements:
 ```bash
 git clone https://github.com/Auxillo-Tech/Aux-proton-drive-bridge.git
 cd Aux-proton-drive-bridge
-npm install
+npm ci
 npm run check
 npm start
 ```
@@ -201,19 +217,21 @@ npm start
 ## Build packages from source
 
 ```bash
-npm install
+npm ci
 npm run check
-npm run release:all          # Build, sign, and generate manifest
 ```
 
 Or step by step:
 
 ```bash
 npm run smoke:source         # Verify source runs
-npm run dist:x64             # Build AppImage, .deb, .rpm
+npm run dist:linux           # Build AppImage, .deb, .rpm on Linux
+npm run e2e:packaged         # Exercise the packaged AppImage through CDP
 npm run release:source       # Create source archives
-npm run release:manifest     # Generate SHA256SUMS + release manifest
-npm run release:sign         # GPG/signify sign all artifacts
+npm run release:sbom         # Generate the CycloneDX production SBOM
+npm run release:manifest     # Generate release metadata
+npm run release:sign         # Generate checksums and required Ed25519 signature
+npm run release:sign:verify  # Verify every checksum and the signature
 npm run smoke:appimage       # Verify packaged AppImage
 ```
 
@@ -247,5 +265,6 @@ You can also use the **Updates** tab in the app to check for and download new ve
 
 ## Current packaging limitations
 
-- v0.3.0 is x64 only.
+- v0.3.1 is x64 only.
+- Flatpak is not shipped because Proton Drive CLI 0.6.0 has no authoritative immutable Flatpak source or offline sandbox build path.
 - Wider distro qualification is still pending.
