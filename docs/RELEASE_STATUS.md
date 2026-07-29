@@ -1,10 +1,10 @@
 # Release status
 
-Status: **v0.3.0** - Full-featured sync, transfer queue, conflict resolution, FUSE mount, and auto-update.
+Status: **v0.3.1** - Full-featured sync, transfer queue, conflict resolution, FUSE mount, and auto-update.
 
 Version: 0.3.1
-Publication: not yet published to GitHub Releases
-Release page after publication: <https://github.com/Auxillo-Tech/Aux-proton-drive-bridge/releases/tag/v0.3.1>
+Publication: published on GitHub Releases
+Release page: <https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/tag/v0.3.1>
 
 ## Release gates
 
@@ -53,4 +53,4 @@ The checksum manifest must have a valid Ed25519 signature from the public key in
 - Sync never propagates deletion. It preserves or restores the surviving copy.
 - Proton Drive CLI 0.6.0 supports one active authenticated account and exposes no mount command.
 - Flatpak remains blocked until there is an authoritative immutable Proton Drive CLI source and an offline sandbox build path.
-- GitHub publication and AUR publication are maintainer actions performed after local release validation.
+- GitHub Releases are the public distribution channel. AUR publication remains a separate maintainer action after local release validation.

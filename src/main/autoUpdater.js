@@ -9,7 +9,7 @@ const crypto = require('node:crypto');
 const { app } = require('electron');
 
 const GITHUB_OWNER = 'Auxillo-Tech';
-const GITHUB_REPO = 'Aux-proton-drive-bridge';
+const GITHUB_REPO = 'Aux-Proton-Drive-Bridge';
 const RELEASES_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 const UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000;
 const MAX_REDIRECTS = 5;

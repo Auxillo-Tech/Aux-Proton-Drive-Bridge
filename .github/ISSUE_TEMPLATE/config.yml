@@ -2,7 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: Security report
     url: https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/blob/main/SECURITY.md
-    about: Report vulnerabilities privately. Do not open a public issue.
+    about: Report vulnerabilities privately to security@auxillo.tech. Do not open a public issue.
   - name: Auxillo website
     url: https://auxillo.tech
     about: Hosted Auxillo products and company information
