@@ -66,6 +66,7 @@ const srcinfo = `pkgbase = aux-proton-drive-bridge-bin
 \tdepends = xdg-utils
 \tprovides = aux-proton-drive-bridge
 \tconflicts = aux-proton-drive-bridge
+\toptions = !strip
 \tsource = ${appImageName}::${sourceUrl}
 \tsource = LICENSE
 \tsha256sums = ${checksum}
