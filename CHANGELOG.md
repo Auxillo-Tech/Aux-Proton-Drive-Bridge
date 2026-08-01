@@ -4,6 +4,29 @@ All notable releases of Aux Proton Drive Bridge are listed here.
 The GitHub Releases page is the canonical source for installable artifacts:
 https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases
 
+## 0.3.2 - 2026-08-01
+
+Selective sync and the full Auxillo desktop shell.
+
+### Added
+
+- Selective sync: user-defined exclude patterns (`*` within a name, `**` across
+  folders), persisted across restarts, editable live from the Sync tab
+- Sync mode, poll interval, and last open tab are remembered across restarts
+
+### Changed
+
+- Interface reworked into the Auxillo desktop app shell shared with Aux
+  Command: branded topbar, tab strip, status bar, and glass panels
+- Inter and JetBrains Mono typefaces are bundled (SIL OFL 1.1) so the UI
+  renders identically on every distribution
+
+### Security
+
+- `proton:openFolder` no longer grants filesystem write capability to
+  renderer-supplied paths, and the file-manager launch can no longer hang
+  the request; the e2e suite now probes this bypass directly
+
 ## 0.3.1 - 2026-07-29
 
 Public Linux release line for the Proton Drive desktop bridge.
