@@ -43,10 +43,21 @@ const sections = packages.map(info => {
   ].filter(Boolean).join('\n');
 });
 if (!sections.length) throw new Error('No production dependencies were discovered');
+const fontLicense = fs.readFileSync(path.join(root, 'src/renderer/assets/fonts/OFL.txt'), 'utf8').trim();
+sections.push([
+  '## Bundled typefaces',
+  '',
+  'License: OFL-1.1',
+  '',
+  'Inter (Copyright 2016 The Inter Project Authors) and JetBrains Mono',
+  '(Copyright 2020 The JetBrains Mono Project Authors) are bundled so the',
+  'interface renders identically on every Linux distribution.',
+  `\n\`\`\`text\n${fontLicense.replace(/```/g, '` ` `')}\n\`\`\``
+].join('\n'));
 const output = [
   '# Third-Party Notices',
   '',
-  'This file covers production npm dependencies bundled with Aux Proton Drive Bridge.',
+  'This file covers production npm dependencies and bundled typefaces shipped with Aux Proton Drive Bridge.',
   'Electron also ships its Chromium and Electron license notices beside the packaged executable.',
   '',
   ...sections,

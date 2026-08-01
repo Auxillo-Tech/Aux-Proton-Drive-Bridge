@@ -8,33 +8,33 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <main class="shell">
-    <header class="hero">
-      <div class="hero-brand">
-        <img src="../../assets/logo-header.png"
-             srcset="../../assets/logo-header.png 1x, ../../assets/logo-header@2x.png 2x"
-             alt="Auxillo"
-             class="brand-logo" />
-        <div class="hero-text">
-          <h1>Aux Proton Drive Bridge</h1>
-          <p class="subtitle">Unofficial Linux desktop bridge powered by Proton's official Drive CLI.</p>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="../../assets/icon-64.png" alt="" class="brand-mark" />
+        <div class="brand-copy">
+          <h1 class="product-name">Aux Proton Drive Bridge</h1>
+          <p class="product-tagline">Proton Drive for Linux · powered by the official Proton Drive CLI</p>
         </div>
       </div>
-      <div class="status-card" role="status" aria-live="polite">
-        <span id="statusDot" class="dot"></span>
-        <div>
-          <strong id="statusText">Checking CLI…</strong>
-          <small id="versionText">Waiting for status</small>
-        </div>
+      <div class="topbar-right">
         <div class="sync-indicator" id="syncIndicator" title="Sync status">
           <span id="syncIcon">⏸</span>
           <small id="syncStatusText">Idle</small>
         </div>
+        <div class="status-card" role="status" aria-live="polite">
+          <span id="statusDot" class="dot"></span>
+          <div class="status-copy">
+            <strong id="statusText">Checking CLI…</strong>
+            <small id="versionText">Waiting for status</small>
+          </div>
+        </div>
+        <img src="../../assets/logo-header.png"
+             srcset="../../assets/logo-header.png 1x, ../../assets/logo-header@2x.png 2x"
+             alt="Auxillo"
+             class="brand-logo" />
       </div>
     </header>
-
-    <!-- Live activity bar -->
-    <div id="activityBar" class="activity-bar" role="status" aria-live="polite">✓ Loading…</div>
 
     <!-- Toast container -->
     <div id="toastContainer" class="toast-container" aria-live="assertive"></div>
@@ -48,6 +48,8 @@
       <button id="tabFuse" class="tab" role="tab" aria-controls="panelFuse" aria-selected="false" tabindex="-1">FUSE Mount</button>
       <button id="tabUpdates" class="tab" role="tab" aria-controls="panelUpdates" aria-selected="false" tabindex="-1">Updates</button>
     </nav>
+
+    <main class="shell">
 
     <!-- Tab: Files (original UI) -->
     <section id="panelFiles" class="tab-panel active">
@@ -138,6 +140,17 @@
         </div>
         <div class="sync-mode-warn">
           ⚠ Bidirectional sync is experimental. Start with Conservative mode and verify behavior.
+        </div>
+        <div class="ignore-box">
+          <h3>Selective sync — excluded patterns</h3>
+          <label>One pattern per line (<code>*</code> matches within a name, <code>**</code> matches across folders)
+            <textarea id="ignorePatternsInput" rows="4" spellcheck="false" placeholder="node_modules&#10;*.iso&#10;Videos/**"></textarea>
+          </label>
+          <div class="ignore-actions">
+            <button id="saveIgnorePatternsBtn" class="secondary">Save excluded patterns</button>
+            <small id="ignorePatternsStatus"></small>
+          </div>
+          <p class="mini-note">Matching files and folders are skipped by the sync engine. Hidden files (dotfiles), <code>*.tmp</code>, <code>*.swp</code>, and editor backups are always excluded.</p>
         </div>
       </section>
 
@@ -272,7 +285,11 @@
       </div>
       <pre id="logOutput"></pre>
     </section>
-  </main>
+    </main>
+
+    <!-- Live activity status bar -->
+    <footer id="activityBar" class="activity-bar" role="status" aria-live="polite">✓ Loading…</footer>
+  </div>
   <script src="./renderer.js"></script>
 </body>
 </html>
