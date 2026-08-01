@@ -13,6 +13,7 @@ const commandUploadFile = path.join(secondFolder, 'command-upload.txt');
 fs.writeFileSync(commandUploadFile, 'queued by second-instance E2E');
 const unapprovedFile = path.join(os.homedir(), `.aux-proton-e2e-unapproved-${process.pid}`);
 fs.writeFileSync(unapprovedFile, 'must not be readable through renderer IPC');
+const unapprovedDir = path.join(os.homedir(), `.aux-proton-e2e-unapproved-dir-${process.pid}`);
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-proton-e2e-state-'));
 const executable = process.env.E2E_EXECUTABLE || path.join(root, 'node_modules', '.bin', 'electron');
 const debugArgs = [`--remote-debugging-port=${port}`, `--remote-allow-origins=http://127.0.0.1:${port}`];
@@ -193,12 +194,21 @@ function connectCdp(url) {
       let rejected = false;
       try { await api.uploadPaths({ localPaths: [${JSON.stringify(unapprovedFile)}], parentPath: '/my-files' }); }
       catch { rejected = true; }
+      let openFolderGrantsCapability = false;
+      // Do not await openFolder: the probe must not depend on the file-manager launch
+      // resolving; any capability grant would happen before that regardless.
+      api.openFolder(${JSON.stringify(unapprovedDir)}).catch(() => {});
+      await new Promise(r => setTimeout(r, 500));
+      try {
+        await api.downloadAll({ localFolder: ${JSON.stringify(unapprovedDir)} });
+        openFolderGrantsCapability = true;
+      } catch { }
       await api.transfer.cancelAll();
       await api.transfer.resume();
       const blockedAsset = await fetch('app://bundle/package.json').then(async response => response.status === 204 && (await response.text()) === '').catch(() => true);
-      return { rejected, blockedAsset, selectedFolder: document.querySelector('#localFolderInput')?.value || '' };
+      return { rejected, openFolderGrantsCapability, blockedAsset, selectedFolder: document.querySelector('#localFolderInput')?.value || '' };
     })()`);
-    if (!capability.rejected || !capability.blockedAsset || capability.selectedFolder !== syncFolder) {
+    if (!capability.rejected || capability.openFolderGrantsCapability || !capability.blockedAsset || capability.selectedFolder !== syncFolder) {
       throw new Error(`Local path capability enforcement failed: ${JSON.stringify(capability)}`);
     }
 
@@ -236,6 +246,25 @@ function connectCdp(url) {
       throw new Error(`Sync lifecycle failed: ${JSON.stringify(lifecycle)}`);
     }
 
+    const selectiveSync = await cdp.evaluate(`(async () => {
+      const api = window.auxProtonDriveBridge;
+      const saved = await api.syncEngine.setIgnorePatterns(['node_modules', '*.iso', '  ', 'node_modules']);
+      const fetched = await api.syncEngine.getIgnorePatterns();
+      const state = await api.syncEngine.getState();
+      let invalidRejected = false;
+      try { await api.syncEngine.setIgnorePatterns('not-an-array'); }
+      catch { invalidRejected = true; }
+      const cleared = await api.syncEngine.setIgnorePatterns([]);
+      return { saved, fetched, statePatterns: state.ignorePatterns, invalidRejected, clearedCount: cleared.length };
+    })()`);
+    const expectedPatterns = JSON.stringify(['node_modules', '*.iso']);
+    if (JSON.stringify(selectiveSync.saved) !== expectedPatterns ||
+        JSON.stringify(selectiveSync.fetched) !== expectedPatterns ||
+        JSON.stringify(selectiveSync.statePatterns) !== expectedPatterns ||
+        !selectiveSync.invalidRejected || selectiveSync.clearedCount !== 0) {
+      throw new Error(`Selective sync ignore patterns failed: ${JSON.stringify(selectiveSync)}`);
+    }
+
     await new Promise(resolve => setTimeout(resolve, 1000));
     if (cdp.errors.length) throw new Error(`Renderer errors: ${cdp.errors.join(' | ')}`);
     console.log(JSON.stringify({
@@ -247,7 +276,8 @@ function connectCdp(url) {
       rendererProtocolRestricted: capability.blockedAsset,
       secondInstanceCommands: true,
       fuseCapabilityGate: tabState.fuseReason,
-      syncLifecycle: lifecycle
+      syncLifecycle: lifecycle,
+      selectiveSync: true
     }));
   } finally {
     cdp?.close();
@@ -260,6 +290,7 @@ function connectCdp(url) {
     fs.rmSync(syncFolder, { recursive: true, force: true });
     fs.rmSync(secondFolder, { recursive: true, force: true });
     fs.rmSync(unapprovedFile, { force: true });
+    fs.rmSync(unapprovedDir, { recursive: true, force: true });
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 })().then(() => process.exit(0)).catch(error => {

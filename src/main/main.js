@@ -10,7 +10,7 @@ const { createProfileStore } = require('./profileStore');
 const { createSyncDb } = require('./syncDb');
 const { createTransferQueue } = require('./transferQueue');
 const { createConflictStore } = require('./conflictStore');
-const { createSyncEngine } = require('./syncEngine');
+const { createSyncEngine, normalizeIgnorePatterns } = require('./syncEngine');
 const { createAutoUpdater } = require('./autoUpdater');
 const { createFuseMount } = require('./fuseMount');
 const { assertSafePathInside, isPathInside } = require('./pathSafety');
@@ -287,7 +287,8 @@ function getSyncEngine() {
     syncEngine = createSyncEngine({
       syncDb: getSyncDb(),
       transferQueue: getTransferQueue(),
-      conflictStore: getConflictStore()
+      conflictStore: getConflictStore(),
+      ignorePatterns: getProfileStore().getSettings().ignorePatterns
     });
     syncEngine.on('local_change', (payload) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:localChange', sanitizeForStorage(payload));
@@ -487,10 +488,17 @@ trustedHandle('proton:chooseBackupPaths', async () => {
   return result.filePaths.map(localPath => grantLocalPath(localPath, { label: 'Selected backup path', mustExist: true }));
 });
 trustedHandle('proton:openFolder', async (_event, folder) => {
-  const target = assertGrantedLocalPath(folder || DEFAULT_LOCAL_FOLDER, 'Folder');
-  fs.mkdirSync(target, { recursive: true });
-  await shell.openPath(target);
-  return target;
+  const target = folder || DEFAULT_LOCAL_FOLDER;
+  // Opening in the file manager only needs the path to be safe inside home; it must not
+  // add the path to grantedLocalPaths, or the renderer could self-grant write capability.
+  const safeTarget = assertSafePathInside(target, os.homedir(), 'Opened local folder');
+  fs.mkdirSync(safeTarget, { recursive: true });
+  // Fire and forget: shell.openPath can block indefinitely on some desktops, which
+  // would leave this IPC reply (and the renderer button) hanging.
+  shell.openPath(safeTarget).then(openError => {
+    if (openError) console.warn(`Failed to open folder ${safeTarget}: ${openError}`);
+  }).catch(() => {});
+  return safeTarget;
 });
 trustedHandle('proton:downloadAll', async (_event, options = {}) => {
   const localFolder = assertGrantedLocalPath(options.localFolder || DEFAULT_LOCAL_FOLDER, 'Download destination');
@@ -573,6 +581,16 @@ trustedHandle('sync:scanNow', async () => getSyncEngine().scanNow());
 trustedHandle('sync:getState', async () => getSyncEngine().getState());
 trustedHandle('sync:setMode', async (_event, mode) => { getSyncEngine().setMode(mode); return true; });
 trustedHandle('sync:setPollInterval', async (_event, ms) => { getSyncEngine().setPollInterval(ms); return true; });
+trustedHandle('sync:getIgnorePatterns', async () => getProfileStore().getSettings().ignorePatterns);
+trustedHandle('sync:setIgnorePatterns', async (_event, patterns) => {
+  if (!Array.isArray(patterns) || patterns.length > 100 || patterns.some(value => typeof value !== 'string' || value.length > 200)) {
+    throw new Error('Ignore patterns must be an array of up to 100 strings (200 characters max each)');
+  }
+  const normalized = normalizeIgnorePatterns(patterns);
+  getProfileStore().saveSettings({ ignorePatterns: normalized });
+  getSyncEngine().setIgnorePatterns(normalized);
+  return normalized;
+});
 
 // ── IPC Handlers: Auto-Update ───────────────────────────────
 

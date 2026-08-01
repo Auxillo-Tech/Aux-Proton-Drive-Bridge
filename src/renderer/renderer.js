@@ -37,6 +37,7 @@ function setStatus(status) {
 
 function switchTab(tabName) {
   currentTab = tabName;
+  try { localStorage.setItem('aux-proton-last-tab', tabName); } catch {}
   document.querySelectorAll('.tab').forEach(t => {
     const selected = t.id === `tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`;
     t.classList.toggle('active', selected);
@@ -293,6 +294,7 @@ $('syncStartBtn').addEventListener('click', async () => {
   const mode = $('syncModeSelect').value;
   const interval = parseInt($('pollIntervalSelect').value, 10);
   try {
+    localStorage.setItem('aux-proton-default-sync-mode', mode);
     await api.syncEngine.start(mode, state.localFolder, interval);
     log(`Sync started: mode=${mode}, interval=${interval}ms`);
     refreshSyncDashboard();
@@ -322,6 +324,22 @@ $('syncScanNowBtn').addEventListener('click', async () => {
 });
 
 $('syncRefreshBtn').addEventListener('click', refreshSyncDashboard);
+
+$('saveIgnorePatternsBtn').addEventListener('click', async () => {
+  const patterns = $('ignorePatternsInput').value.split('\n').map(value => value.trim()).filter(Boolean);
+  try {
+    const saved = await api.syncEngine.setIgnorePatterns(patterns);
+    $('ignorePatternsInput').value = saved.join('\n');
+    $('ignorePatternsStatus').textContent = saved.length
+      ? `${saved.length} pattern${saved.length === 1 ? '' : 's'} active`
+      : 'No exclusions active';
+    showToast('Excluded patterns saved', 'success');
+    log(`Selective sync: ${saved.length} excluded pattern(s) saved`);
+  } catch (err) {
+    showToast(err.message, 'error');
+    log(`Failed to save excluded patterns: ${err.message}`, 'error');
+  }
+});
 
 // ── Conflicts ───────────────────────────────────────────────
 
@@ -859,7 +877,10 @@ $('chooseFolderBtn').addEventListener('click', async () => {
   if (folder) { state.localFolder = folder; $('localFolderInput').value = folder; }
 });
 $('localFolderInput').addEventListener('input', (event) => { state.localFolder = event.target.value; });
-$('openFolderBtn').addEventListener('click', () => api.openFolder(state.localFolder));
+$('openFolderBtn').addEventListener('click', () => {
+  const folder = state.localFolder || $('localFolderInput')?.value || '';
+  run('Open local folder', () => api.openFolder(folder));
+});
 $('downloadAllBtn').addEventListener('click', () => {
   if (!state.items.length) return log('Refresh the remote file list before downloading everything.', 'warn');
   return run('Download all', () => api.downloadAll({
@@ -899,6 +920,42 @@ async function boot() {
   $('updateCurrentVersion').textContent = appVersion;
   state.localFolder = await api.getDefaultLocalFolder();
   $('localFolderInput').value = state.localFolder;
+
+  // Persist last used sync mode as default
+  const savedMode = localStorage.getItem('aux-proton-default-sync-mode');
+  const modeSel = $('syncModeSelect');
+  if (savedMode && modeSel) {
+    const has = [...modeSel.options].some(o => o.value === savedMode);
+    if (has) modeSel.value = savedMode;
+  }
+  if (modeSel) {
+    modeSel.addEventListener('change', () => {
+      localStorage.setItem('aux-proton-default-sync-mode', modeSel.value);
+    });
+  }
+
+  // Persist last used poll interval as default
+  const savedInterval = localStorage.getItem('aux-proton-default-poll-interval');
+  const intervalSel = $('pollIntervalSelect');
+  if (intervalSel) {
+    if (savedInterval && [...intervalSel.options].some(o => o.value === savedInterval)) intervalSel.value = savedInterval;
+    intervalSel.addEventListener('change', () => {
+      localStorage.setItem('aux-proton-default-poll-interval', intervalSel.value);
+    });
+  }
+
+  // Restore the tab that was open when the app was last used
+  const savedTab = localStorage.getItem('aux-proton-last-tab');
+  if (savedTab && savedTab !== 'files' && $(`tab${savedTab.charAt(0).toUpperCase() + savedTab.slice(1)}`)) {
+    switchTab(savedTab);
+  }
+
+  // Selective sync excluded patterns
+  try {
+    const patterns = await api.syncEngine.getIgnorePatterns();
+    $('ignorePatternsInput').value = (patterns || []).join('\n');
+  } catch {}
+
   await refreshHistory();
   await refreshBackupProfile();
   const status = await refreshStatus();
