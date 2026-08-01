@@ -14,6 +14,7 @@ const { createSyncEngine, normalizeIgnorePatterns } = require('./syncEngine');
 const { createAutoUpdater } = require('./autoUpdater');
 const { createFuseMount } = require('./fuseMount');
 const { assertSafePathInside, isPathInside } = require('./pathSafety');
+const { refreshUserIcons } = require('./iconRefresh');
 const { buildChildEnv } = require('./childProcessEnv');
 
 if (process.env.AUX_PROTON_DRIVE_USER_DATA_DIR) {
@@ -412,6 +413,26 @@ function createTray() {
   return tray;
 }
 
+function refreshStaleUserIcons() {
+  try {
+    const assetDir = app.isPackaged
+      ? path.join(process.resourcesPath, 'integration', 'assets')
+      : path.join(applicationRoot, 'assets');
+    const updated = refreshUserIcons({ assetDir });
+    if (!updated.length) return;
+    // Nudge desktop icon caches so the refreshed artwork shows up; best-effort.
+    try { fs.rmSync(path.join(app.getPath('home'), '.cache', 'icon-cache.kcache'), { force: true }); } catch {}
+    for (const rebuild of ['kbuildsycoca6', 'kbuildsycoca5']) {
+      try {
+        const child = childProcess.spawn(rebuild, [], { stdio: 'ignore', detached: true });
+        child.on('error', () => {});
+        child.unref();
+      } catch {}
+    }
+    console.log(`Refreshed stale user-level app icons: ${updated.join(', ')}px`);
+  } catch {}
+}
+
 function startScheduler() {
   if (schedulerTimer) return;
   schedulerTimer = setInterval(() => {
@@ -632,6 +653,7 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   startScheduler();
+  refreshStaleUserIcons();
   // Start periodic update checks
   getAutoUpdater().startPeriodicCheck();
   handleExternalCommand(process.argv).catch(error => sendProgress({ stream: 'stderr', text: error.message || String(error) }));

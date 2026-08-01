@@ -98,8 +98,18 @@ install_icons() {
   done
 }
 
+refresh_icon_caches() {
+  # Best effort: stale desktop caches otherwise keep showing the previous icon.
+  rm -f "${HOME}/.cache/icon-cache.kcache" 2>/dev/null || true
+  command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
+  command -v kbuildsycoca5 >/dev/null && kbuildsycoca5 >/dev/null 2>&1 || true
+  command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -f -t "${SHARE_DIR}/icons/hicolor" >/dev/null 2>&1 || true
+  command -v xdg-desktop-menu >/dev/null && xdg-desktop-menu forceupdate >/dev/null 2>&1 || true
+}
+
 install_nautilus
 install_dolphin
 install_thunar
 install_icons
+refresh_icon_caches
 printf 'File manager integration installed for Nautilus, Dolphin, and Thunar.\n'
