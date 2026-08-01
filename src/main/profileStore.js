@@ -132,6 +132,27 @@ function createProfileStore(filePath) {
     return listProfiles().filter(p => p.enabled);
   }
 
+  // App-level settings (currently: selective-sync ignore patterns)
+  function normalizeSettings(input = {}) {
+    const ignorePatterns = Array.isArray(input.ignorePatterns)
+      ? [...new Set(input.ignorePatterns.map(value => String(value).replace(/\0/g, '').trim().slice(0, 200)).filter(Boolean))].slice(0, 100)
+      : [];
+    return { ignorePatterns };
+  }
+
+  function getSettings() {
+    const raw = loadRaw();
+    return normalizeSettings(raw.settings && typeof raw.settings === 'object' ? raw.settings : {});
+  }
+
+  function saveSettings(partial) {
+    const raw = loadRaw();
+    raw.version = 2;
+    raw.settings = normalizeSettings({ ...getSettings(), ...(partial && typeof partial === 'object' ? partial : {}) });
+    saveRaw(raw);
+    return raw.settings;
+  }
+
   return {
     filePath: resolved,
     getDefaultBackupProfile,
@@ -140,7 +161,9 @@ function createProfileStore(filePath) {
     getProfile,
     saveProfile,
     deleteProfile,
-    getActiveProfiles
+    getActiveProfiles,
+    getSettings,
+    saveSettings
   };
 }
 

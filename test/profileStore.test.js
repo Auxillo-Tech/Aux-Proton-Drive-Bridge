@@ -53,3 +53,14 @@ test('profile reads normalize malformed and attacker-controlled persisted entrie
   assert.equal(profiles.find(profile => profile.id === 'unsafe').pollIntervalMs, 5000);
   assert.equal(profiles.some(profile => Object.hasOwn(profile, 'token')), false);
 });
+
+test('settings persist normalized ignore patterns and reject junk', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-proton-settings-'));
+  const store = createProfileStore(path.join(dir, 'profiles.json'));
+  assert.deepEqual(store.getSettings(), { ignorePatterns: [] });
+  const saved = store.saveSettings({ ignorePatterns: ['node_modules', ' node_modules ', '', '*.iso', 'x'.repeat(500)], extra: 'dropped' });
+  assert.deepEqual(saved.ignorePatterns, ['node_modules', '*.iso', 'x'.repeat(200)]);
+  assert.equal(Object.hasOwn(saved, 'extra'), false);
+  const reloaded = createProfileStore(store.filePath).getSettings();
+  assert.deepEqual(reloaded, saved);
+});

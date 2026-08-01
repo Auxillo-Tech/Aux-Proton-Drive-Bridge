@@ -285,4 +285,57 @@ describe('syncEngine - end-to-end state orchestration', () => {
     assert.strictEqual(queue.items.length, 0);
     assert.strictEqual(db.getTrackedFileByPath('/my-files/tracked.txt').sync_state, 'synced');
   });
+
+  function createEngineForTree(sub, ignorePatterns) {
+    engine.destroy();
+    fs.mkdirSync(sub, { recursive: true });
+    engine = createSyncEngine({
+      syncDb: db,
+      transferQueue: queue,
+      conflictStore: store,
+      localFolder: sub,
+      ignorePatterns,
+      getStatus: async () => ({ installed: true, authenticated: true, busy: false }),
+      runProton: async () => ({ code: 0, stdout: '[]', stderr: '' })
+    });
+    return engine;
+  }
+
+  it('skips locally scanned files that match user ignore patterns', async () => {
+    const sub = path.join(dir, 'tree');
+    createEngineForTree(sub, ['node_modules', '*.iso', 'Videos/**']);
+    fs.mkdirSync(path.join(sub, 'node_modules', 'pkg'), { recursive: true });
+    fs.writeFileSync(path.join(sub, 'node_modules', 'pkg', 'index.js'), 'skip me');
+    fs.writeFileSync(path.join(sub, 'image.iso'), 'skip me');
+    fs.mkdirSync(path.join(sub, 'Videos', 'clips'), { recursive: true });
+    fs.writeFileSync(path.join(sub, 'Videos', 'clips', 'movie.mp4'), 'skip me');
+    fs.writeFileSync(path.join(sub, 'keep.txt'), 'keep me');
+    engine.scanLocalTree(sub);
+    const tracked = db.listTrackedFiles().map(item => item.remote_path).sort();
+    // `Videos/**` excludes the folder's contents; the empty folder itself stays tracked.
+    assert.deepEqual(tracked, ['/my-files/Videos', '/my-files/keep.txt']);
+  });
+
+  it('applies updated ignore patterns live and reports them in state', async () => {
+    const sub = path.join(dir, 'tree');
+    createEngineForTree(sub, []);
+    fs.writeFileSync(path.join(sub, 'draft.bak'), 'ignore later');
+    fs.writeFileSync(path.join(sub, 'keep.txt'), 'keep me');
+    assert.deepEqual(engine.getState().ignorePatterns, []);
+    engine.setIgnorePatterns(['*.bak', '', '   ', '*', '**', 'x'.repeat(300)]);
+    assert.deepEqual(engine.getState().ignorePatterns, ['*.bak']);
+    engine.scanLocalTree(sub);
+    const tracked = db.listTrackedFiles().map(item => item.remote_path);
+    assert.deepEqual(tracked, ['/my-files/keep.txt']);
+  });
+
+  it('does not let ignore patterns with regex metacharacters escape their literal meaning', async () => {
+    const sub = path.join(dir, 'tree');
+    createEngineForTree(sub, ['a+b.txt']);
+    fs.writeFileSync(path.join(sub, 'a+b.txt'), 'literal plus');
+    fs.writeFileSync(path.join(sub, 'aab.txt'), 'keep me');
+    engine.scanLocalTree(sub);
+    const tracked = db.listTrackedFiles().map(item => item.remote_path);
+    assert.deepEqual(tracked, ['/my-files/aab.txt']);
+  });
 });

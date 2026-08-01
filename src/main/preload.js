@@ -67,7 +67,9 @@ contextBridge.exposeInMainWorld('auxProtonDriveBridge', {
     scanNow: () => ipcRenderer.invoke('sync:scanNow'),
     getState: () => ipcRenderer.invoke('sync:getState'),
     setMode: (mode) => ipcRenderer.invoke('sync:setMode', mode),
-    setPollInterval: (ms) => ipcRenderer.invoke('sync:setPollInterval', ms)
+    setPollInterval: (ms) => ipcRenderer.invoke('sync:setPollInterval', ms),
+    getIgnorePatterns: () => ipcRenderer.invoke('sync:getIgnorePatterns'),
+    setIgnorePatterns: (patterns) => ipcRenderer.invoke('sync:setIgnorePatterns', patterns)
   },
 
   // Auto-update

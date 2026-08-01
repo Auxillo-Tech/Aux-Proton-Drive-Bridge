@@ -11,6 +11,29 @@ const SYNC_MODES = Object.freeze({
   CONSERVATIVE: 'conservative'
 });
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
+const MAX_IGNORE_PATTERNS = 100;
+
+function normalizeIgnorePatterns(patterns) {
+  if (!Array.isArray(patterns)) return [];
+  return [...new Set(patterns
+    .map(pattern => String(pattern).replace(/\0/g, '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''))
+    .filter(pattern => pattern && pattern !== '*' && pattern !== '**' && pattern.length <= 200))]
+    .slice(0, MAX_IGNORE_PATTERNS);
+}
+
+function compileIgnorePatterns(patterns) {
+  return normalizeIgnorePatterns(patterns).map(pattern => {
+    const source = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*/g, '\u0000')
+      .replace(/\*/g, '[^/]*')
+      .replace(/\?/g, '[^/]')
+      .replace(/\u0000/g, '.*');
+    const matcher = new RegExp(`^${source}$`, 'i');
+    matcher.pattern = pattern;
+    return matcher;
+  });
+}
 const MAX_POLL_INTERVAL_MS = 24 * 60 * 60_000;
 const DEBOUNCE_MS = 500;
 const MAX_BATCH_SIZE = 50;
@@ -38,6 +61,7 @@ function createSyncEngine(options = {}) {
   let mode = SYNC_MODES.CONSERVATIVE;
   let pollInterval = DEFAULT_POLL_INTERVAL_MS;
   let queueRemoveHandlers = [];
+  let ignoreMatchers = compileIgnorePatterns(options.ignorePatterns);
   const pendingResolutions = new Map();
   const syncTransferIds = new Set();
   const debounceTimers = new Map();
@@ -57,8 +81,17 @@ function createSyncEngine(options = {}) {
 
   function shouldIgnore(relativePath) {
     const normalized = String(relativePath || '').replace(/\\/g, '/');
-    return normalized.split('/').some(part => !part || part.startsWith('.')) ||
-      normalized.endsWith('.tmp') || normalized.endsWith('.swp') || normalized.endsWith('~');
+    if (normalized.split('/').some(part => !part || part.startsWith('.')) ||
+      normalized.endsWith('.tmp') || normalized.endsWith('.swp') || normalized.endsWith('~')) return true;
+    if (!ignoreMatchers.length) return false;
+    const parts = normalized.split('/');
+    return ignoreMatchers.some(matcher => matcher.test(normalized) || parts.some(part => matcher.test(part)));
+  }
+
+  function setIgnorePatterns(patterns) {
+    ignoreMatchers = compileIgnorePatterns(patterns);
+    emit('ignore_patterns_changed', { patterns: ignoreMatchers.map(matcher => matcher.pattern), ts: new Date().toISOString() });
+    return ignoreMatchers.map(matcher => matcher.pattern);
   }
 
   function safeRemotePath(relativePath) {
@@ -688,6 +721,7 @@ function createSyncEngine(options = {}) {
       mode,
       pollInterval,
       isWatching: watcher !== null,
+      ignorePatterns: ignoreMatchers.map(matcher => matcher.pattern),
       folder: activeFolder,
       localFolder: activeFolder,
       lastCheckpoint: syncDb.getLastCheckpoint(),
@@ -750,10 +784,10 @@ function createSyncEngine(options = {}) {
   }
 
   return {
-    start, stop, setMode, setPollInterval, getState,
+    start, stop, setMode, setPollInterval, setIgnorePatterns, getState,
     scanNow: runSyncCycle, runSyncCycle, pollRemote, scanLocalTree,
     syncPending, resolveConflict, on, destroy, SYNC_MODES
   };
 }
 
-module.exports = { createSyncEngine, SYNC_MODES };
+module.exports = { createSyncEngine, normalizeIgnorePatterns, SYNC_MODES };
