@@ -10,7 +10,7 @@ Proton の公式 `proton-drive` CLI を使用した非公式の Linux デスク�
 
 ## ステータス
 
-バージョン **`0.3.0`** - 完全な同期、転送キュー、競合解決、FUSE マウントサポート。
+バージョン **`0.3.3`** - 完全な同期、転送キュー、競合解決、FUSE マウントサポート。
 
 Aux Proton Drive Bridge は、Proton の公式 CLI を介して Proton Drive 操作用の GUI を Linux ユーザーに提供します。
 
@@ -33,21 +33,21 @@ Aux Proton Drive Bridge は、Proton の公式 CLI を介して Proton Drive 操
 ### AppImage
 ダウンロードして実行：
 ```
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
 ```
 実行可能にしてファイルマネージャーまたはターミナルから起動。
 
 ### Debian / Ubuntu / Mint / Pop!_OS
 ダウンロード：
 ```
-Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
 ```
 グラフィカルパッケージインストーラーまたは `apt`/`dpkg` でインストール。
 
 ### Fedora / RHEL / openSUSE
 ダウンロード：
 ```
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
 ```
 グラフィカルパッケージインストーラー、`dnf`、`zypper`、または `rpm` でインストール。
 

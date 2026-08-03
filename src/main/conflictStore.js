@@ -131,6 +131,12 @@ function createConflictStore(syncDb) {
       : (lastSync.syncedLocalSize ?? lastSync.synced_local_size ?? lastSync.localSize ?? lastSync.local_size ?? lastSync.size);
     if ((current.size || 0) !== (lastSize || 0)) return true;
 
+    const currentHash = current.hash ?? current.local_hash ?? current.remote_hash ?? null;
+    const lastHash = side === 'remote'
+      ? (lastSync.syncedRemoteHash ?? lastSync.synced_remote_hash)
+      : (lastSync.syncedLocalHash ?? lastSync.synced_local_hash);
+    if (currentHash && lastHash && currentHash !== lastHash) return true;
+
     return false;
   }
 

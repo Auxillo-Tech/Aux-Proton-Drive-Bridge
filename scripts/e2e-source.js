@@ -265,6 +265,20 @@ function connectCdp(url) {
       throw new Error(`Selective sync ignore patterns failed: ${JSON.stringify(selectiveSync)}`);
     }
 
+    const logBound = await cdp.evaluate(`(() => {
+      document.querySelector('#clearLogBtn').click();
+      for (let i = 0; i < 750; i++) log('bounded-log-' + i);
+      const output = document.querySelector('#logOutput');
+      return {
+        nodes: output.childNodes.length,
+        hasFirst: output.textContent.includes('bounded-log-0'),
+        hasLast: output.textContent.includes('bounded-log-749')
+      };
+    })()`);
+    if (logBound.nodes > 500 || logBound.hasFirst || !logBound.hasLast) {
+      throw new Error(`Renderer log bound failed: ${JSON.stringify(logBound)}`);
+    }
+
     await new Promise(resolve => setTimeout(resolve, 1000));
     if (cdp.errors.length) throw new Error(`Renderer errors: ${cdp.errors.join(' | ')}`);
     console.log(JSON.stringify({

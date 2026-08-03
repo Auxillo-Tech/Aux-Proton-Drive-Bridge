@@ -151,7 +151,7 @@ When the sync engine detects that a file changed both locally and remotely, it r
 
 ## FUSE mount
 
-The **FUSE Mount** tab reports mounting as unavailable in v0.3.1. Proton Drive CLI 0.6.0 has no mount command, and this release does not bundle a safely owned mount helper. The bridge does not start a guessed or orphanable mount process.
+The **FUSE Mount** tab reports mounting as unavailable in v0.3.3. Proton Drive CLI 0.6.0 has no mount command, and this release does not bundle a safely owned mount helper. The bridge does not start a guessed or orphanable mount process.
 
 ## Activity log
 

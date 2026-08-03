@@ -16,7 +16,7 @@ cp scripts/smoke-source.js "$fixture/scripts/"
 chmod -R a+rX "$fixture"
 podman run --rm --network=host -v "$fixture:/work:ro,Z" docker.io/library/archlinux:latest bash -lc '
   set -euo pipefail
-  pacman -Syu --noconfirm --needed base-devel nodejs xorg-server-xvfb dbus >/dev/null
+  pacman -Syu --noconfirm --needed base-devel nodejs xorg-server-xvfb dbus nss gtk3 alsa-lib libxss >/dev/null
   useradd -m builder
   install -d -o builder -g builder /home/builder/pkg /home/builder/src
   cp /work/dist/PKGBUILD /work/dist/.SRCINFO /work/dist/LICENSE /home/builder/pkg/
@@ -26,14 +26,15 @@ podman run --rm --network=host -v "$fixture:/work:ro,Z" docker.io/library/archli
   runuser -u builder -- env SRCDEST=/home/builder/src bash -lc "cd /home/builder/pkg && makepkg --nodeps --noconfirm"
   package="$(find /home/builder/pkg -maxdepth 1 -name "*.pkg.tar.zst" -print -quit)"
   test -n "$package"
-  bsdtar -tf "$package" | grep -q "usr/bin/aux-proton-drive-bridge"
-  bsdtar -tf "$package" | grep -q "usr/share/aux-proton-drive-bridge/.*AppImage"
-  bsdtar -tf "$package" | grep -q "usr/share/licenses/aux-proton-drive-bridge/LICENSE"
+  bsdtar -tf "$package" > /tmp/aux-proton-package-files.txt
+  grep -q "usr/bin/aux-proton-drive-bridge" /tmp/aux-proton-package-files.txt
+  grep -q "opt/aux-proton-drive-bridge/aux-proton-drive-bridge" /tmp/aux-proton-package-files.txt
+  grep -q "usr/share/licenses/aux-proton-drive-bridge/LICENSE" /tmp/aux-proton-package-files.txt
   pacman -U --noconfirm --assume-installed proton-drive-cli=0.6.0 "$package" >/dev/null
   useradd -m tester
-  runuser -u tester -- env HOME=/home/tester APPIMAGE_EXTRACT_AND_RUN=1 SMOKE_EXECUTABLE=/usr/bin/aux-proton-drive-bridge \
+  runuser -u tester -- env HOME=/home/tester SMOKE_EXECUTABLE=/usr/bin/aux-proton-drive-bridge \
     xvfb-run -a dbus-run-session -- node /work/scripts/smoke-source.js
-  pacman -Rns --noconfirm aux-proton-drive-bridge >/dev/null
+  pacman -Rns --noconfirm aux-proton-drive-bridge-bin >/dev/null
   test ! -e /usr/bin/aux-proton-drive-bridge
 '
 printf 'AUR build, install, launch, and uninstall validation passed\n'

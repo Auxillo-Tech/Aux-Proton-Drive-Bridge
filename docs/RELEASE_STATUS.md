@@ -1,26 +1,29 @@
 # Release status
 
-Status: **v0.3.1** - Full-featured sync, transfer queue, conflict resolution, FUSE mount, and auto-update.
+Status: **v0.3.3 local release candidate** - Full-featured sync, transfer queue, conflict resolution, FUSE mount, and auto-update.
 
-Version: 0.3.1
-Publication: published on GitHub Releases
-Release page: <https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/tag/v0.3.1>
+Version: 0.3.3
+Publication: not yet published; the current public release remains v0.3.2
+Planned release page: <https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/tag/v0.3.3>
 
 ## Release gates
 
-A v0.3.1 release is valid only when all of these commands pass from one clean Git revision:
+A v0.3.3 release is valid only when all of these commands pass from one clean Git revision:
 
 - Source tests/static checks: `npm run check` - passed
 - Dependency audit: `npm audit --json` - 0 vulnerabilities (verified)
+- Source test result: 199 passed, 1 intentionally skipped
+- Real 44,275-item tree: 8.43 s migration/full scan with 79.59 ms maximum event-loop delay;
+  4.99 s steady scan with 97.58 ms maximum event-loop delay
 
 ## Release assets
 
-- `Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage`
-- `Aux.Proton.Drive.Bridge-0.3.1-amd64.deb`
-- `Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm`
-- `aux-proton-drive-bridge-0.3.1-source.tar.gz`
-- `aux-proton-drive-bridge-0.3.1-source.zip`
-- `aux-proton-drive-bridge-0.3.1-aur.tar.gz`
+- `Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage`
+- `Aux.Proton.Drive.Bridge-0.3.3-amd64.deb`
+- `Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm`
+- `aux-proton-drive-bridge-0.3.3-source.tar.gz`
+- `aux-proton-drive-bridge-0.3.3-source.zip`
+- `aux-proton-drive-bridge-0.3.3-aur.tar.gz`
 - `latest-linux.yml`
 - `sbom.cdx.json`
 - `release-manifest.json`

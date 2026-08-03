@@ -16,6 +16,7 @@ const { createFuseMount } = require('./fuseMount');
 const { assertSafePathInside, isPathInside } = require('./pathSafety');
 const { refreshUserIcons } = require('./iconRefresh');
 const { buildChildEnv } = require('./childProcessEnv');
+const { createProgressPersistenceGate } = require('./progressPersistence');
 
 if (process.env.AUX_PROTON_DRIVE_USER_DATA_DIR) {
   app.setPath('userData', path.resolve(process.env.AUX_PROTON_DRIVE_USER_DATA_DIR));
@@ -48,6 +49,7 @@ let schedulerTimer;
 let schedulerRunning = false;
 let shutdownStarted = false;
 let shutdownComplete = false;
+const progressPersistence = createProgressPersistenceGate({ intervalMs: 1000 });
 let externalLocalFolder = null;
 const queuedOperations = new Map();
 const grantedLocalPaths = new Set();
@@ -232,12 +234,15 @@ function getTransferQueue() {
     // Pipe transfer queue events to the renderer
     transferQueue.on('progress', (payload) => {
       const operationId = queuedOperations.get(payload.id);
-      if (operationId) getOperationStore().appendEvent(operationId, payload.stream || 'system', payload.text || '');
+      if (operationId && progressPersistence.shouldPersist(payload.id, payload)) {
+        getOperationStore().appendEvent(operationId, payload.stream || 'system', payload.text || '');
+      }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('proton:progress', sanitizeForStorage(payload));
       }
     });
     transferQueue.on('complete', (payload) => {
+      progressPersistence.clear(payload.id);
       const operationId = queuedOperations.get(payload.id);
       if (operationId) {
         getOperationStore().finish(operationId, 'succeeded', payload.result);
@@ -248,6 +253,7 @@ function getTransferQueue() {
       }
     });
     transferQueue.on('error', (payload) => {
+      progressPersistence.clear(payload.id);
       const operationId = queuedOperations.get(payload.id);
       if (operationId) {
         getOperationStore().finish(operationId, 'failed', { error: payload.error });
@@ -258,6 +264,7 @@ function getTransferQueue() {
       }
     });
     transferQueue.on('skipped', (payload) => {
+      progressPersistence.clear(payload.id);
       const operationId = queuedOperations.get(payload.id);
       if (operationId) {
         getOperationStore().finish(operationId, 'skipped', payload.result);
@@ -268,6 +275,7 @@ function getTransferQueue() {
       }
     });
     transferQueue.on('cancelled', (payload) => {
+      progressPersistence.clear(payload.id);
       const operationId = queuedOperations.get(payload.id);
       if (operationId) {
         getOperationStore().finish(operationId, 'cancelled', { error: 'Cancelled' });

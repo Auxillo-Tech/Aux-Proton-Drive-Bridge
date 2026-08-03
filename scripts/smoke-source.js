@@ -2,9 +2,40 @@ const http = require('node:http');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const childProcess = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
 
 const root = path.join(__dirname, '..');
-const env = { ...process.env, ELECTRON_ENABLE_LOGGING: '1' };
+const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-proton-smoke-'));
+const smokeUserData = path.join(smokeRoot, 'user-data');
+const smokeHome = path.join(smokeRoot, 'home');
+const smokeConfig = path.join(smokeRoot, 'config');
+const smokeCache = path.join(smokeRoot, 'cache');
+const smokeData = path.join(smokeRoot, 'data');
+for (const directory of [smokeUserData, smokeHome, smokeConfig, smokeCache, smokeData]) {
+  fs.mkdirSync(directory, { recursive: true });
+}
+const fakeProton = path.join(smokeRoot, 'proton-drive-smoke');
+fs.writeFileSync(fakeProton, `#!/usr/bin/env node
+const leaked = Object.keys(process.env).filter(key => key !== 'XAUTHORITY' && /(?:TOKEN|SECRET|PASSWORD|PASSPHRASE|PRIVATE|CREDENTIAL|AUTH)/i.test(key));
+if (leaked.length) { console.error('smoke credential leak: ' + leaked.join(',')); process.exit(42); }
+if (process.argv[2] === 'version') { console.log('proton-drive smoke'); process.exit(0); }
+console.error('not logged in');
+process.exit(1);
+`, { mode: 0o700 });
+const env = {
+  ...process.env,
+  HOME: smokeHome,
+  XDG_CONFIG_HOME: smokeConfig,
+  XDG_CACHE_HOME: smokeCache,
+  XDG_DATA_HOME: smokeData,
+  ELECTRON_ENABLE_LOGGING: '1',
+  AUX_PROTON_DRIVE_USER_DATA_DIR: smokeUserData
+};
+for (const key of Object.keys(env)) {
+  if (key !== 'XAUTHORITY' && /(?:TOKEN|SECRET|PASSWORD|PASSPHRASE|PRIVATE|CREDENTIAL|AUTH)/i.test(key)) delete env[key];
+}
+env.PROTON_DRIVE_BIN = fakeProton;
 const executable = process.env.SMOKE_EXECUTABLE || path.join(root, 'node_modules', '.bin', 'electron');
 const debugArgs = ['--remote-debugging-port=9339', '--remote-allow-origins=http://127.0.0.1:9339'];
 const extraArgs = process.env.SMOKE_EXTRA_ARGS ? JSON.parse(process.env.SMOKE_EXTRA_ARGS) : [];
@@ -58,5 +89,6 @@ function getJson(pathname) {
       new Promise(resolve => setTimeout(resolve, 2200))
     ]);
     clearTimeout(killer);
+    fs.rmSync(smokeRoot, { recursive: true, force: true });
   }
 })().then(() => process.exit(0)).catch(err => { console.error(err); killTree(child.pid, 'SIGKILL'); process.exit(1); });

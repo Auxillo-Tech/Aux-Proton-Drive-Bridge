@@ -1,4 +1,5 @@
 const { spawn } = require('node:child_process');
+const { Worker } = require('node:worker_threads');
 const path = require('node:path');
 const os = require('node:os');
 const { withProtonProcessLock } = require('./protonProcessLock');
@@ -10,6 +11,7 @@ const DEFAULT_LOCAL_FOLDER = path.join(os.homedir(), 'ProtonDrive');
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const LONG_TIMEOUT_MS = 2 * 60 * 60_000;
+const ASYNC_PARSE_THRESHOLD_BYTES = 512 * 1024;
 const activeChildren = new Set();
 
 
@@ -48,27 +50,50 @@ function buildCommand(action, options = {}, trustedBin = null) {
   throw new Error(`Unsupported Proton Drive action: ${action}`);
 }
 
-function parseListOutput(output) {
-  // Try JSON format first (used when -j flag is passed)
+function parseListOutput(output, options = {}) {
+  const text = String(output ?? '');
+  const requireJson = options.requireJson === true;
+  if (requireJson && !text.trim()) throw new Error('Remote returned an empty JSON listing');
+
+  let parsed;
   try {
-    const parsed = JSON.parse(String(output || ''));
-    if (Array.isArray(parsed)) {
-      return parsed
-        .filter(item => (item.name?.ok && item.name.value) || item.uid)
-        .map(item => ({
-          type: item.type === 'folder' ? 'folder' : 'file',
-          name: item.name?.ok ? item.name.value : String(item.uid),
-          size: Number(item.activeRevision?.value?.claimedSize ?? item.totalStorageSize ?? item.file?.size ?? item.size ?? 0),
-          modified: item.activeRevision?.value?.claimedModificationTime || item.modificationTime || item.modified || null,
-          uid: item.uid || null
-        }));
-    }
-  } catch {
-    // Not JSON — fall back to text parsing
+    parsed = JSON.parse(text);
+  } catch (error) {
+    if (requireJson) throw new Error(`Remote returned invalid JSON listing: ${error.message}`);
   }
 
-  // Text fallback: parse human-readable listing format
-  return String(output || '')
+  if (parsed !== undefined) {
+    if (!Array.isArray(parsed)) {
+      if (requireJson) throw new Error('Remote JSON listing must have an array root');
+    } else {
+      if (requireJson) {
+        const invalidIndex = parsed.findIndex(item => {
+          const hasName = Boolean(item?.name?.ok && typeof item.name.value === 'string' && item.name.value);
+          const hasUid = Boolean(item?.uid);
+          return (!hasName && !hasUid) || !['file', 'folder'].includes(item?.type);
+        });
+        if (invalidIndex !== -1) throw new Error(`Remote JSON listing contains an invalid row at index ${invalidIndex}`);
+      }
+      return parsed
+        .filter(item => (item.name?.ok && item.name.value) || item.uid)
+        .map(item => {
+          const claimedDigests = item.activeRevision?.value?.claimedDigests;
+          const sha1 = claimedDigests?.sha1Verified === true && /^[0-9a-f]{40}$/i.test(claimedDigests.sha1 || '')
+            ? `sha1:${claimedDigests.sha1.toLowerCase()}` : null;
+          return {
+            type: item.type === 'folder' ? 'folder' : 'file',
+            name: item.name?.ok ? item.name.value : String(item.uid),
+            size: Number(item.activeRevision?.value?.claimedSize ?? item.totalStorageSize ?? item.file?.size ?? item.size ?? 0),
+            modified: item.activeRevision?.value?.claimedModificationTime || item.modificationTime || item.modified || null,
+            ...(sha1 ? { hash: sha1 } : {}),
+            uid: item.uid || null
+          };
+        });
+    }
+  }
+
+  // Human-readable parsing is retained for explicit non-JSON callers only.
+  return text
     .split(/\r?\n/)
     .map(line => line.trim())
     .filter(Boolean)
@@ -79,6 +104,24 @@ function parseListOutput(output) {
       const type = raw.startsWith('🗂') ? 'folder' : raw.startsWith('📄') ? 'file' : 'unknown';
       return { type, name, raw };
     });
+}
+
+function parseListOutputAsync(output, options = {}) {
+  const text = String(output ?? '');
+  if (Buffer.byteLength(text) < ASYNC_PARSE_THRESHOLD_BYTES) {
+    return Promise.resolve().then(() => parseListOutput(text, options));
+  }
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, 'remoteListParserWorker.js'), { workerData: { text, options } });
+    worker.once('message', message => {
+      if (message?.ok) resolve(message.rows);
+      else reject(new Error(message?.error || 'Remote listing parser failed'));
+    });
+    worker.once('error', reject);
+    worker.once('exit', code => {
+      if (code !== 0) reject(new Error(`Remote listing parser exited with code ${code}`));
+    });
+  });
 }
 
 // Array-based serialized queue (fixed max size, no growing promise chain)
@@ -210,6 +253,7 @@ module.exports = {
   getStatus,
   normalizeRemotePath,
   parseListOutput,
+  parseListOutputAsync,
   runProton,
   shutdownProtonProcesses
 };

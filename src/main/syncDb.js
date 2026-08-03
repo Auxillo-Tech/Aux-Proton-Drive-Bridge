@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const Database = require('better-sqlite3');
 const { sanitizeForStorage } = require('./operationStore');
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 9;
 const SYNC_STATES = [
   'synced', 'pending_download', 'pending_upload', 'downloading', 'uploading',
   'conflict', 'unknown', 'local_new', 'remote_new', 'local_modified',
@@ -57,6 +57,12 @@ function createSyncDb(dbPath) {
       synced_remote_size INTEGER,
       synced_local_modified TEXT,
       synced_remote_modified TEXT,
+      synced_local_hash TEXT,
+      synced_remote_hash TEXT,
+      upload_verification_local_hash TEXT,
+      upload_expected_remote_hash TEXT,
+      upload_reupload_pending INTEGER NOT NULL DEFAULT 0,
+      own_upload_digests TEXT,
       sync_state TEXT NOT NULL DEFAULT 'unknown' CHECK(sync_state IN (${SYNC_STATES.map(s => `'${s}'`).join(',')})),
       sync_version INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
@@ -95,12 +101,20 @@ function createSyncDb(dbPath) {
   if (!trackedColumns.has('synced_remote_size')) db.exec('ALTER TABLE tracked_files ADD COLUMN synced_remote_size INTEGER');
   if (!trackedColumns.has('synced_local_modified')) db.exec('ALTER TABLE tracked_files ADD COLUMN synced_local_modified TEXT');
   if (!trackedColumns.has('synced_remote_modified')) db.exec('ALTER TABLE tracked_files ADD COLUMN synced_remote_modified TEXT');
+  if (!trackedColumns.has('synced_local_hash')) db.exec('ALTER TABLE tracked_files ADD COLUMN synced_local_hash TEXT');
+  if (!trackedColumns.has('synced_remote_hash')) db.exec('ALTER TABLE tracked_files ADD COLUMN synced_remote_hash TEXT');
+  if (!trackedColumns.has('upload_verification_local_hash')) db.exec('ALTER TABLE tracked_files ADD COLUMN upload_verification_local_hash TEXT');
+  if (!trackedColumns.has('upload_expected_remote_hash')) db.exec('ALTER TABLE tracked_files ADD COLUMN upload_expected_remote_hash TEXT');
+  if (!trackedColumns.has('upload_reupload_pending')) db.exec('ALTER TABLE tracked_files ADD COLUMN upload_reupload_pending INTEGER NOT NULL DEFAULT 0');
+  if (!trackedColumns.has('own_upload_digests')) db.exec('ALTER TABLE tracked_files ADD COLUMN own_upload_digests TEXT');
   db.exec('UPDATE tracked_files SET local_size=COALESCE(local_size,size),remote_size=COALESCE(remote_size,size)');
   db.exec(`UPDATE tracked_files SET
     synced_local_size=COALESCE(synced_local_size,CASE WHEN sync_state='synced' THEN local_size END),
     synced_remote_size=COALESCE(synced_remote_size,CASE WHEN sync_state='synced' THEN remote_size END),
     synced_local_modified=COALESCE(synced_local_modified,CASE WHEN sync_state='synced' THEN local_modified END),
-    synced_remote_modified=COALESCE(synced_remote_modified,CASE WHEN sync_state='synced' THEN remote_modified END)`);
+    synced_remote_modified=COALESCE(synced_remote_modified,CASE WHEN sync_state='synced' THEN remote_modified END),
+    synced_local_hash=COALESCE(synced_local_hash,CASE WHEN sync_state='synced' THEN local_hash END),
+    synced_remote_hash=COALESCE(synced_remote_hash,CASE WHEN sync_state='synced' THEN COALESCE(remote_hash,'legacy:unknown') END)`);
   db.prepare("INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(SCHEMA_VERSION));
 
   const statements = new Map();
@@ -160,6 +174,11 @@ function createSyncDb(dbPath) {
         remote_hash=COALESCE(@remoteHash,remote_hash),
         local_hash=COALESCE(@localHash,local_hash),
         sync_state=COALESCE(@syncState,sync_state),
+        upload_verification_local_hash=CASE
+          WHEN @syncState IS NULL THEN upload_verification_local_hash
+          WHEN @syncState='uploading' THEN upload_verification_local_hash
+          ELSE NULL
+        END,
         sync_version=sync_version+1,
         updated_at=@timestamp WHERE id=@id`).run({
         id,
@@ -204,8 +223,167 @@ function createSyncDb(dbPath) {
 
   function setSyncState(remotePath, state) {
     if (!SYNC_STATES.includes(state)) throw new Error(`Invalid sync state: ${state}`);
-    stmt('UPDATE tracked_files SET sync_state=?,sync_version=sync_version+1,updated_at=? WHERE id=?')
-      .run(state, now(), pathToId(remotePath));
+    stmt(`UPDATE tracked_files SET sync_state=?,
+      upload_verification_local_hash=CASE WHEN ?='uploading' THEN upload_verification_local_hash ELSE NULL END,
+      upload_expected_remote_hash=CASE WHEN ? IN ('conflict','synced') THEN NULL ELSE upload_expected_remote_hash END,
+      upload_reupload_pending=CASE WHEN ? IN ('conflict','synced','uploading') THEN 0 ELSE upload_reupload_pending END,
+      sync_version=sync_version+1,updated_at=? WHERE id=?`)
+      .run(state, state, state, state, now(), pathToId(remotePath));
+  }
+
+  function beginUploadVerification(remotePath, { expectedRemoteHash = null, verificationLocalHash = null } = {}) {
+    return stmt(`UPDATE tracked_files SET
+      sync_state='uploading',
+      upload_verification_local_hash=CASE
+        WHEN type='folder' THEN 'folder:upload'
+        WHEN ? IS NOT NULL THEN ?
+        ELSE local_hash
+      END,
+      upload_expected_remote_hash=?,
+      upload_reupload_pending=0,
+      sync_version=sync_version+1,
+      updated_at=?
+      WHERE id=?`).run(
+      verificationLocalHash,
+      verificationLocalHash,
+      expectedRemoteHash,
+      now(),
+      pathToId(remotePath)
+    ).changes > 0;
+  }
+
+  function setUploadExpectedRemoteHash(remotePath, expectedRemoteHash) {
+    return stmt(`UPDATE tracked_files SET
+      upload_expected_remote_hash=?,
+      sync_version=sync_version+1,
+      updated_at=?
+      WHERE id=? AND (
+        sync_state='uploading' OR
+        upload_reupload_pending=1 OR
+        upload_verification_local_hash IS NOT NULL
+      )`).run(
+      expectedRemoteHash,
+      now(),
+      pathToId(remotePath)
+    ).changes > 0;
+  }
+
+  function parseOwnUploadDigests(raw) {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(value => typeof value === 'string' && value.startsWith('sha1:'));
+    } catch {
+      return [];
+    }
+  }
+
+  function listOwnUploadDigests(remotePath) {
+    const row = getTrackedFileByPath(remotePath);
+    return parseOwnUploadDigests(row?.own_upload_digests);
+  }
+
+  function rememberOwnUploadDigest(remotePath, digest) {
+    if (!remotePath || typeof digest !== 'string' || !digest.startsWith('sha1:')) return false;
+    const existing = listOwnUploadDigests(remotePath);
+    if (existing.includes(digest)) return true;
+    const next = [...existing, digest].slice(-32);
+    return stmt(`UPDATE tracked_files SET
+      own_upload_digests=?,
+      sync_version=sync_version+1,
+      updated_at=?
+      WHERE id=?`).run(JSON.stringify(next), now(), pathToId(remotePath)).changes > 0;
+  }
+
+  function clearOwnUploadDigests(remotePath) {
+    return stmt(`UPDATE tracked_files SET
+      own_upload_digests=NULL,
+      sync_version=sync_version+1,
+      updated_at=?
+      WHERE id=?`).run(now(), pathToId(remotePath)).changes > 0;
+  }
+
+  function hasOwnUploadDigest(remotePath, digest) {
+    if (!digest) return false;
+    return listOwnUploadDigests(remotePath).includes(digest);
+  }
+
+  function cancelUploadVerificationForLocalEdit(remotePath, {
+    uploadedLocalHash,
+    uploadedLocalSize = null,
+    uploadedLocalModified = null,
+    localPath = null,
+    localHash = null,
+    localSize = null,
+    localModified = null,
+    type = null
+  } = {}) {
+    return stmt(`UPDATE tracked_files SET
+      local_path=COALESCE(?, local_path),
+      type=COALESCE(?, type),
+      size=COALESCE(?, size),
+      local_size=COALESCE(?, local_size),
+      local_modified=COALESCE(?, local_modified),
+      local_hash=COALESCE(?, local_hash),
+      synced_local_hash=COALESCE(?, synced_local_hash),
+      synced_local_size=COALESCE(?, synced_local_size),
+      synced_local_modified=COALESCE(?, synced_local_modified),
+      upload_verification_local_hash=NULL,
+      upload_reupload_pending=1,
+      sync_state='local_modified',
+      sync_version=sync_version+1,
+      updated_at=?
+      WHERE id=?`).run(
+      localPath,
+      type,
+      localSize,
+      localSize,
+      localModified,
+      localHash,
+      uploadedLocalHash,
+      uploadedLocalSize,
+      uploadedLocalModified,
+      now(),
+      pathToId(remotePath)
+    ).changes > 0;
+  }
+
+  function clearUploadReuploadPending(remotePath) {
+    return stmt(`UPDATE tracked_files SET
+      upload_reupload_pending=0,
+      upload_expected_remote_hash=NULL,
+      sync_version=sync_version+1,
+      updated_at=?
+      WHERE id=?`).run(now(), pathToId(remotePath)).changes > 0;
+  }
+
+  function adoptRemoteBaselineForReupload(remotePath, {
+    remoteHash = null,
+    remoteSize = null,
+    remoteModified = null
+  } = {}) {
+    return stmt(`UPDATE tracked_files SET
+      remote_hash=COALESCE(?, remote_hash),
+      remote_size=COALESCE(?, remote_size),
+      remote_modified=COALESCE(?, remote_modified),
+      synced_remote_hash=COALESCE(?, synced_remote_hash),
+      synced_remote_size=COALESCE(?, synced_remote_size),
+      synced_remote_modified=COALESCE(?, synced_remote_modified),
+      upload_reupload_pending=1,
+      sync_state='local_modified',
+      sync_version=sync_version+1,
+      updated_at=?
+      WHERE id=?`).run(
+      remoteHash,
+      remoteSize,
+      remoteModified,
+      remoteHash,
+      remoteSize,
+      remoteModified,
+      now(),
+      pathToId(remotePath)
+    ).changes > 0;
   }
 
   function markSynced(remotePath) {
@@ -215,8 +393,21 @@ function createSyncDb(dbPath) {
       synced_remote_size=remote_size,
       synced_local_modified=local_modified,
       synced_remote_modified=remote_modified,
+      synced_local_hash=local_hash,
+      synced_remote_hash=remote_hash,
+      upload_verification_local_hash=NULL,
+      upload_expected_remote_hash=NULL,
+      upload_reupload_pending=0,
+      own_upload_digests=NULL,
       sync_version=sync_version+1,
       updated_at=? WHERE id=?`).run(now(), pathToId(remotePath));
+  }
+
+  function upgradeLocalFingerprint(remotePath, localHash) {
+    return stmt(`UPDATE tracked_files SET
+      local_hash=?,
+      synced_local_hash=COALESCE(synced_local_hash,'legacy:unknown')
+      WHERE id=?`).run(localHash, pathToId(remotePath)).changes > 0;
   }
 
   function countByState() {
@@ -230,7 +421,8 @@ function createSyncDb(dbPath) {
     const serialized = detail ? JSON.stringify(sanitizeForStorage(detail)).slice(0, MAX_EVENT_DETAIL_BYTES) : null;
     const result = stmt('INSERT INTO sync_events (file_id,event_type,detail,severity,created_at) VALUES (?,?,?,?,?)')
       .run(fileId, eventType, serialized, severity || 'info', now()).lastInsertRowid;
-    stmt('DELETE FROM sync_events WHERE id NOT IN (SELECT id FROM sync_events ORDER BY id DESC LIMIT ?)').run(MAX_SYNC_EVENTS);
+    const pruneThrough = Number(result) - MAX_SYNC_EVENTS;
+    if (pruneThrough > 0) stmt('DELETE FROM sync_events WHERE id <= ?').run(pruneThrough);
     return result;
   }
 
@@ -353,7 +545,10 @@ function createSyncDb(dbPath) {
   return {
     dbPath: resolved,
     getTrackedFile, getTrackedFileByPath, listTrackedFiles, listFilesNeedingSync,
-    getStaleItemsByState, upsertTrackedFile, removeTrackedFile, setSyncState, markSynced,
+    getStaleItemsByState, upsertTrackedFile, removeTrackedFile, setSyncState, beginUploadVerification,
+    cancelUploadVerificationForLocalEdit, clearUploadReuploadPending, adoptRemoteBaselineForReupload,
+    setUploadExpectedRemoteHash, rememberOwnUploadDigest, listOwnUploadDigests,
+    clearOwnUploadDigests, hasOwnUploadDigest, markSynced, upgradeLocalFingerprint,
     countByState, pathToId, logEvent, getEvents, getRecentErrors, clearEvents,
     recordConflict, resolveConflict, listConflicts, listConflictRecords,
     saveCheckpoint, getLastCheckpoint, transaction,
