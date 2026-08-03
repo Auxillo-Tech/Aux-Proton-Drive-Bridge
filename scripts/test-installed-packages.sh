@@ -10,8 +10,8 @@ rpm="dist/Aux.Proton.Drive.Bridge-${version}-x86_64.rpm"
 
 fixture="$(mktemp -d)"
 trap 'rm -rf "$fixture"' EXIT
-install -m 0644 "$deb" "$fixture/"
-install -m 0644 "$rpm" "$fixture/"
+install -m 0644 "$deb" "$fixture/package.deb"
+install -m 0644 "$rpm" "$fixture/package.rpm"
 install -m 0644 scripts/smoke-source.js "$fixture/smoke-source.js"
 # mktemp dirs are 0700; package-test user inside the container must read them.
 chmod 0755 "$fixture"
@@ -23,7 +23,7 @@ podman run --rm --pull=missing -v "$fixture:/fixture:ro,Z" docker.io/library/ubu
   set -euo pipefail
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
-  apt-get install -y -qq /fixture/*.deb nodejs xvfb dbus-x11 procps libasound2t64 libnss3 libatk-bridge2.0-0t64 libgtk-3-0t64 libgbm1 libxshmfence1 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 >/tmp/apt-install.log || apt-get install -y -qq /fixture/*.deb nodejs xvfb dbus-x11 procps libasound2 libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libxshmfence1 >/tmp/apt-install.log
+  apt-get install -y -qq /fixture/package.deb nodejs xvfb dbus-x11 procps libasound2t64 libnss3 libatk-bridge2.0-0t64 libgtk-3-0t64 libgbm1 libxshmfence1 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 >/tmp/apt-install.log || apt-get install -y -qq /fixture/package.deb nodejs xvfb dbus-x11 procps libasound2 libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libxshmfence1 >/tmp/apt-install.log
   test -x /usr/bin/aux-proton-drive-bridge
   useradd --create-home --shell /bin/bash package-test
   runuser -u package-test -- env HOME=/home/package-test SMOKE_EXECUTABLE=/usr/bin/aux-proton-drive-bridge xvfb-run -a dbus-run-session -- node /fixture/smoke-source.js
@@ -41,7 +41,7 @@ podman run --rm --pull=missing -v "$fixture:/fixture:ro,Z" docker.io/library/ubu
 printf 'Testing RPM install, GUI launch, shutdown, and uninstall...\n'
 podman run --rm --pull=missing -v "$fixture:/fixture:ro,Z" registry.fedoraproject.org/fedora:44 bash -lc '
   set -euo pipefail
-  dnf install -y -q /fixture/*.rpm nodejs xorg-x11-server-Xvfb dbus-daemon procps-ng alsa-lib nss at-spi2-atk gtk3 mesa-libgbm libX11 libxshmfence >/tmp/dnf-install.log
+  dnf install -y -q /fixture/package.rpm nodejs xorg-x11-server-Xvfb dbus-daemon procps-ng alsa-lib nss at-spi2-atk gtk3 mesa-libgbm libX11 libxshmfence >/tmp/dnf-install.log
   test -x /usr/bin/aux-proton-drive-bridge
   useradd --create-home --shell /bin/bash package-test
   runuser -u package-test -- env HOME=/home/package-test SMOKE_EXECUTABLE=/usr/bin/aux-proton-drive-bridge xvfb-run -a dbus-run-session -- node /fixture/smoke-source.js

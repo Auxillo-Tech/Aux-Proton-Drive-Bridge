@@ -14,7 +14,7 @@ Unofficial Linux desktop bridge for Proton Drive using Proton's official `proton
 
 ## Status
 
-Version **`0.3.0`** - Full-featured sync, transfer queue, conflict resolution, and FUSE mount support.
+Version **`0.3.3`** - Full-featured sync, transfer queue, conflict resolution, and FUSE mount support.
 
 Aux Proton Drive Bridge gives Linux users a GUI for Proton Drive operations through Proton's official CLI. It includes persistent sync metadata, bidirectional sync, a live transfer queue, conflict management, signed updates, and capability-gated mount status.
 
@@ -93,7 +93,7 @@ The installed CLI owns authentication. The bridge supports one active Proton acc
 Download and run:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
 ```
 
 Make it executable and run it from your file manager or terminal.
@@ -103,7 +103,7 @@ Make it executable and run it from your file manager or terminal.
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.1-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
 ```
 
 Install with your graphical package installer or with `apt`/`dpkg`.
@@ -113,7 +113,7 @@ Install with your graphical package installer or with `apt`/`dpkg`.
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.1-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
 ```
 
 Install with your graphical package installer, `dnf`, `zypper`, or `rpm`.
@@ -197,7 +197,7 @@ Implemented foundations:
 ### Future
 
 - AUR packaging - PKGBUILD available in `dist/aur/`
-- Flatpak packaging - manifest available in `dist/flatpak/`
+- Flatpak packaging - not shipped until a sandboxed Proton CLI integration is validated
 - Wider distro qualification
 - Desktop notifications for all events
 - Advanced conflict diff viewer with content comparison

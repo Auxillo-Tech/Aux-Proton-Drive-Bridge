@@ -172,6 +172,7 @@ function createTransferQueue(options = {}) {
 
       let stdout = '';
       let stderr = '';
+      let outputBytes = 0;
       const allLines = [];
       const lineBuffers = { stdout: '', stderr: '' };
       let settled = false;
@@ -194,11 +195,13 @@ function createTransferQueue(options = {}) {
       }
 
       function appendOutput(stream, text) {
-        if (Buffer.byteLength(stdout) + Buffer.byteLength(stderr) + Buffer.byteLength(text) > MAX_OUTPUT_BYTES) {
+        const textBytes = Buffer.byteLength(text);
+        if (outputBytes + textBytes > MAX_OUTPUT_BYTES) {
           cleanupChild();
           settle(new Error(`Proton Drive ${item.action} output exceeded ${MAX_OUTPUT_BYTES} bytes`));
           return false;
         }
+        outputBytes += textBytes;
         if (stream === 'stdout') stdout += text;
         else stderr += text;
         return true;
@@ -214,7 +217,7 @@ function createTransferQueue(options = {}) {
           if (!line) continue;
           allLines.push(line);
           const parsed = parseProgressLine(line);
-          if (parsed) emit('progress', { id: item.id, action: item.action, stream, text: line, ...parsed, ts: new Date().toISOString() });
+          emit('progress', { id: item.id, action: item.action, stream, text: line, ...(parsed || {}), ts: new Date().toISOString() });
         }
       }
 
@@ -223,7 +226,6 @@ function createTransferQueue(options = {}) {
         const text = data.toString();
         if (!appendOutput('stdout', text)) return;
         consumeOutput('stdout', text);
-        emit('progress', { id: item.id, action: item.action, stream: 'stdout', text: text.trim(), ts: new Date().toISOString() });
       });
 
       child.stderr.on('data', data => {
@@ -231,7 +233,6 @@ function createTransferQueue(options = {}) {
         const text = data.toString();
         if (!appendOutput('stderr', text)) return;
         consumeOutput('stderr', text);
-        emit('progress', { id: item.id, action: item.action, stream: 'stderr', text: text.trim(), ts: new Date().toISOString() });
       });
 
       child.on('error', (err) => settle(err));

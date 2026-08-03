@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildCommand, parseListOutput, normalizeRemotePath } = require('../src/main/protonCli');
+const { buildCommand, parseListOutput, parseListOutputAsync, normalizeRemotePath } = require('../src/main/protonCli');
 
 test('normalizeRemotePath builds safe Proton POSIX paths', () => {
   assert.equal(normalizeRemotePath('/my-files', '1. Misc'), '/my-files/1. Misc');
@@ -32,13 +32,27 @@ test('parseListOutput extracts Proton folders from human CLI output', () => {
   assert.equal(rows[1].type, 'file');
 });
 
+test('parseListOutput rejects incomplete JSON snapshots in strict listing mode', async () => {
+  assert.throws(() => parseListOutput('', { requireJson: true }), /empty JSON listing/i);
+  assert.throws(() => parseListOutput('{"items":[]}', { requireJson: true }), /array root/i);
+  assert.throws(() => parseListOutput('[{"type":"file"}]', { requireJson: true }), /invalid row/i);
+  assert.deepEqual(parseListOutput('[]', { requireJson: true }), []);
+  await assert.rejects(parseListOutputAsync('', { requireJson: true }), /empty JSON listing/i);
+});
+
 test('parseListOutput preserves structured JSON metadata', () => {
   const rows = parseListOutput(JSON.stringify([
     {
       type: 'file',
       name: { ok: true, value: 'report.pdf' },
       modificationTime: '2026-07-27T10:00:00.000Z',
-      file: { size: 12345 },
+      activeRevision: {
+        value: {
+          claimedSize: 12345,
+          claimedModificationTime: '2026-07-27T10:00:00.000Z',
+          claimedDigests: { sha1: '0123456789ABCDEF0123456789ABCDEF01234567', sha1Verified: true }
+        }
+      },
       uid: 'remote-uid'
     }
   ]));
@@ -48,8 +62,27 @@ test('parseListOutput preserves structured JSON metadata', () => {
     name: 'report.pdf',
     size: 12345,
     modified: '2026-07-27T10:00:00.000Z',
+    hash: 'sha1:0123456789abcdef0123456789abcdef01234567',
     uid: 'remote-uid'
   });
+});
+
+test('parseListOutputAsync moves large JSON listings off the event loop', async () => {
+  const output = JSON.stringify(Array.from({ length: 10_000 }, (_, index) => ({
+    type: 'file',
+    name: { ok: true, value: `remote-${index}.txt` },
+    modificationTime: '2026-08-03T10:00:00.000Z',
+    totalStorageSize: index,
+    uid: `uid-${index}`
+  })));
+  let settled = false;
+  const parsing = parseListOutputAsync(output).then(rows => {
+    settled = true;
+    return rows;
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.strictEqual(settled, false, 'large remote JSON was parsed synchronously on the event loop');
+  assert.strictEqual((await parsing).length, 10_000);
 });
 
 test('buildCommand uses JSON for list and info operations', () => {

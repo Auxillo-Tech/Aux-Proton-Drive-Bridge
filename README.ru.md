@@ -10,7 +10,7 @@
 
 ## Статус
 
-Версия **`0.3.0`** - Полнофункциональная синхронизация, очередь передачи, разрешение конфликтов и поддержка FUSE-монтирования.
+Версия **`0.3.3`** - Полнофункциональная синхронизация, очередь передачи, разрешение конфликтов и поддержка FUSE-монтирования.
 
 Aux Proton Drive Bridge предоставляет пользователям Linux графический интерфейс для операций с Proton Drive через официальный CLI Proton.
 
@@ -33,17 +33,17 @@ Aux Proton Drive Bridge предоставляет пользователям Li
 ### AppImage
 Загрузите и запустите:
 ```
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
 ```
 
 ### Debian / Ubuntu / Mint / Pop!_OS
 ```
-sudo apt install ./Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
+sudo apt install ./Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
 ```
 
 ### Fedora / RHEL / openSUSE
 ```
-sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
 ```
 
 ## Требования

@@ -3,6 +3,8 @@ const state = { items: [], selected: new Set(), localFolder: '', backupProfile: 
 
 const $ = (id) => document.getElementById(id);
 const logOutput = $('logOutput');
+const MAX_LOG_LINES = 500;
+let logLineCount = 0;
 
 function makeElement(tag, className, text) {
   const element = document.createElement(tag);
@@ -13,7 +15,12 @@ function makeElement(tag, className, text) {
 
 function log(message, kind = 'info') {
   const ts = new Date().toLocaleTimeString();
-  logOutput.textContent += `[${ts}] ${kind.toUpperCase()} ${message}\n`;
+  logOutput.append(document.createTextNode(`[${ts}] ${kind.toUpperCase()} ${message}\n`));
+  logLineCount += 1;
+  while (logLineCount > MAX_LOG_LINES && logOutput.firstChild) {
+    logOutput.firstChild.remove();
+    logLineCount -= 1;
+  }
   logOutput.scrollTop = logOutput.scrollHeight;
 }
 
@@ -226,6 +233,16 @@ async function run(label, fn) {
     log(err?.message || String(err), 'error');
     await refreshHistory().catch(() => undefined);
   }
+}
+
+function runUiTask(label, fn) {
+  return Promise.resolve()
+    .then(fn)
+    .catch(error => {
+      const message = error?.message || String(error);
+      log(`${label}: ${message}`, 'error');
+      showToast(`✗ ${label}: ${message}`, 'error', 6000);
+    });
 }
 
 // ── Sync Dashboard ──────────────────────────────────────────
@@ -810,8 +827,8 @@ api.onTransferComplete((payload) => {
   updateActivityBar();
   refreshSyncDashboard().catch(() => {});
   showToast(`✓ ${payload.action} completed`, 'success');
-  refreshHistory();
-  refreshQueue();
+  runUiTask('Refresh transfer history', refreshHistory);
+  runUiTask('Refresh transfer queue', refreshQueue);
   // Refresh file list if on Files tab
   if (currentTab === 'files') refreshFiles().catch(() => {});
 });
@@ -822,7 +839,7 @@ api.onTransferError((payload) => {
   activityState.downloading = 0;
   updateActivityBar();
   showToast(`✗ ${payload.error}`, 'error', 6000);
-  refreshQueue();
+  runUiTask('Refresh transfer queue', refreshQueue);
 });
 
 api.onExternalDownloadFolder((payload) => {
@@ -856,7 +873,12 @@ api.onLocalChange((payload) => {
 });
 
 api.onRemoteChange((payload) => {
-  log(`Remote change: ${payload.type} ${payload.path}`, 'info');
+  if (payload.type === 'scan_summary') {
+    const counts = payload.counts || {};
+    log(`Remote scan: ${payload.total || 0} change(s) (${counts.created || 0} created, ${counts.modified || 0} modified, ${counts.deleted || 0} deleted)`, 'info');
+  } else {
+    log(`Remote change: ${payload.type} ${payload.path}`, 'info');
+  }
   activityState.syncing = true;
   updateActivityBar();
 });
@@ -866,16 +888,19 @@ api.onRemoteChange((payload) => {
 $('refreshBtn').addEventListener('click', () => run('Refresh', refreshFiles));
 $('loginBtn').addEventListener('click', () => run('Login', () => api.login()));
 $('logoutBtn').addEventListener('click', () => run('Logout', () => api.logout()));
-$('clearLogBtn').addEventListener('click', () => { logOutput.textContent = ''; });
+$('clearLogBtn').addEventListener('click', () => {
+  logOutput.textContent = '';
+  logLineCount = 0;
+});
 $('clearHistoryBtn').addEventListener('click', () => run('Clear history', async () => {
   await api.clearOperationHistory();
   await refreshHistory();
   return { stdout: 'Transfer history cleared.' };
 }));
-$('chooseFolderBtn').addEventListener('click', async () => {
+$('chooseFolderBtn').addEventListener('click', () => runUiTask('Choose local folder', async () => {
   const folder = await api.chooseLocalFolder();
   if (folder) { state.localFolder = folder; $('localFolderInput').value = folder; }
-});
+}));
 $('localFolderInput').addEventListener('input', (event) => { state.localFolder = event.target.value; });
 $('openFolderBtn').addEventListener('click', () => {
   const folder = state.localFolder || $('localFolderInput')?.value || '';
@@ -895,17 +920,17 @@ $('downloadSelectedBtn').addEventListener('click', () => {
   if (!paths.length) return log('Nothing selected.', 'warn');
   return run('Download selected', () => api.downloadPaths({ paths, localFolder: state.localFolder, fileConflictStrategy: 'skip', folderConflictStrategy: 'merge' }));
 });
-$('uploadBtn').addEventListener('click', async () => {
+$('uploadBtn').addEventListener('click', () => runUiTask('Choose upload files', async () => {
   const localPaths = await api.chooseUploadPaths();
   if (!localPaths.length) return log('Upload cancelled.', 'warn');
   return run('Upload', () => api.uploadPaths({ localPaths, parentPath: '/my-files', fileConflictStrategy: 'skip', folderConflictStrategy: 'merge' }));
-});
-$('chooseBackupPathsBtn').addEventListener('click', async () => {
+}));
+$('chooseBackupPathsBtn').addEventListener('click', () => runUiTask('Choose backup paths', async () => {
   const localPaths = await api.chooseBackupPaths();
   if (!localPaths.length) return log('Backup path selection cancelled.', 'warn');
   state.backupProfile = { ...currentBackupProfileFromForm(), localPaths };
   renderBackupPaths();
-});
+}));
 $('saveBackupProfileBtn').addEventListener('click', () => run('Save backup profile', async () => {
   state.backupProfile = await api.saveBackupProfile(currentBackupProfileFromForm());
   renderBackupPaths();

@@ -232,6 +232,25 @@ describe('transferQueue — execution safety', () => {
     await queue.destroy();
   });
 
+  it('emits each transfer output line once instead of duplicating parsed and raw progress', async () => {
+    const queue = createTransferQueue({ concurrency: 1, spawn: scriptedSpawn([{
+      code: 0,
+      stdout: 'Downloading first.txt (25%)\nDownloading second.txt (50%)\n'
+    }]) });
+    const messages = [];
+    queue.on('progress', payload => messages.push(payload.text));
+    await new Promise((resolve, reject) => {
+      queue.on('complete', resolve);
+      queue.on('error', payload => reject(new Error(payload.error)));
+      queue.enqueue('download', { paths: ['/my-files'], localFolder: '/tmp' });
+    });
+    assert.deepStrictEqual(messages, [
+      'Downloading first.txt (25%)',
+      'Downloading second.txt (50%)'
+    ]);
+    await queue.destroy();
+  });
+
   it('awaits active cancellation before removing queue listeners', async () => {
     const queue = createTransferQueue({ concurrency: 1, spawn: scriptedSpawn([{ code: 0, delay: 1000 }]) });
     let cancelled = false;

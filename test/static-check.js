@@ -23,7 +23,7 @@ for (const api of ['getDefaultLocalFolder', 'getStatus', 'listMyFiles', 'downloa
   if (!preload.includes(api)) throw new Error(`Preload API missing ${api}`);
 }
 // Check new modules exist
-const newModules = ['syncDb.js', 'transferQueue.js', 'progressParser.js', 'conflictStore.js', 'syncEngine.js', 'autoUpdater.js', 'fuseMount.js', 'pathSafety.js', 'protonProcessLock.js', 'childProcessEnv.js'];
+const newModules = ['syncDb.js', 'transferQueue.js', 'progressParser.js', 'progressPersistence.js', 'conflictStore.js', 'syncEngine.js', 'autoUpdater.js', 'fuseMount.js', 'pathSafety.js', 'protonProcessLock.js', 'childProcessEnv.js'];
 for (const mod of newModules) {
   const p = path.join(__dirname, '..', 'src/main', mod);
   if (!fs.existsSync(p)) throw new Error(`Missing new module: src/main/${mod}`);
@@ -63,6 +63,8 @@ if (/\.style\.[A-Za-z]/.test(rendererJs)) throw new Error('Renderer style mutati
 for (const match of rendererJs.matchAll(/\.innerHTML\s*=\s*([^;\n]+)/g)) {
   if (!/^(['"])\1$/.test(match[1].trim())) throw new Error('Dynamic innerHTML assignment is not allowed');
 }
+if (!rendererJs.includes('MAX_LOG_LINES')) throw new Error('Renderer activity log must have a fixed line bound');
+if (/logOutput\.textContent\s*\+=/.test(rendererJs)) throw new Error('Renderer activity log must not rebuild its complete text on every event');
 // Check new docs and config files exist
 const extraFiles = [
   'LICENSE', 'THIRD_PARTY_NOTICES.md', 'packaging/aur/README.md', 'packaging/flatpak/README.md',
@@ -78,4 +80,16 @@ const removedFlatpak = path.join(__dirname, '..', 'dist/flatpak/tech.auxillo.aux
 if (fs.existsSync(removedFlatpak)) throw new Error('The unsupported Flatpak manifest must not be shipped');
 const updater = fs.readFileSync(path.join(__dirname, '..', 'src/main/autoUpdater.js'), 'utf8');
 if (!updater.includes('verifyChecksumManifestSignature')) throw new Error('Updater publisher signature verification is missing');
+const installDocs = fs.readFileSync(path.join(__dirname, '..', 'docs/INSTALL.md'), 'utf8');
+if (!installDocs.includes('node scripts/release-signing.js --verify')) throw new Error('Install docs must use the JSON-envelope-aware signature verifier');
+if (/openssl pkeyutl[\s\S]{0,200}-sigfile SHA256SUMS\.txt\.sig/.test(installDocs)) throw new Error('Install docs must not pass the JSON signature envelope directly to OpenSSL');
+const smokeSource = fs.readFileSync(path.join(__dirname, '..', 'scripts/smoke-source.js'), 'utf8');
+for (const guard of ['AUX_PROTON_DRIVE_USER_DATA_DIR: smokeUserData', 'mkdtempSync', 'rmSync(smokeRoot', 'HOME: smokeHome', 'XDG_CONFIG_HOME: smokeConfig', 'XDG_CACHE_HOME: smokeCache', 'XDG_DATA_HOME: smokeData', 'PROTON_DRIVE_BIN = fakeProton']) {
+  if (!smokeSource.includes(guard)) throw new Error(`Source smoke isolation guard is missing: ${guard}`);
+}
+if (/process\.env\.AUX_PROTON_DRIVE_USER_DATA_DIR\s*\|\|/.test(smokeSource)) {
+  throw new Error('Canonical source smoke must never inherit an operator user-data directory');
+}
+const syncEngineSource = fs.readFileSync(path.join(__dirname, '..', 'src/main/syncEngine.js'), 'utf8');
+if (syncEngineSource.includes('fs.readdirSync')) throw new Error('Sync scans must not enumerate complete directories synchronously on Electron main');
 console.log('static checks passed');

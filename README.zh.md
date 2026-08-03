@@ -10,7 +10,7 @@
 
 ## 状态
 
-版本 **`0.3.0`** - 功能完整的同步、传输队列、冲突解决和 FUSE 挂载支持。
+版本 **`0.3.3`** - 功能完整的同步、传输队列、冲突解决和 FUSE 挂载支持。
 
 Aux Proton Drive Bridge 通过 Proton 官方 CLI 为 Linux 用户提供 Proton Drive 操作的图形界面。
 
@@ -33,21 +33,21 @@ Aux Proton Drive Bridge 通过 Proton 官方 CLI 为 Linux 用户提供 Proton D
 ### AppImage
 下载并运行：
 ```
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
 ```
 赋予执行权限后从文件管理器或终端运行。
 
 ### Debian / Ubuntu / Mint / Pop!_OS
 下载：
 ```
-Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
 ```
 使用图形化包管理器或 `apt`/`dpkg` 安装。
 
 ### Fedora / RHEL / openSUSE
 下载：
 ```
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
 ```
 使用图形化包管理器、`dnf`、`zypper` 或 `rpm` 安装。
 

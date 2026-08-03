@@ -25,7 +25,7 @@ pkgdesc="Unofficial Linux desktop bridge for Proton Drive using the official Pro
 arch=('x86_64')
 url="https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge"
 license=('MIT')
-depends=('proton-drive-cli' 'libsecret' 'xdg-utils')
+depends=('proton-drive-cli' 'libsecret' 'xdg-utils' 'nss' 'gtk3' 'alsa-lib' 'libxss')
 provides=('aux-proton-drive-bridge')
 conflicts=('aux-proton-drive-bridge')
 options=('!strip')
@@ -33,15 +33,17 @@ source=("${appImageName}::${sourceUrl}" 'LICENSE')
 sha256sums=('${checksum}' '${licenseChecksum}')
 
 package() {
-  install -Dm755 "\${srcdir}/${appImageName}" "\${pkgdir}/opt/aux-proton-drive-bridge/${appImageName}"
-  install -dm755 "\${pkgdir}/usr/bin"
-  printf '%s\\n' '#!/bin/sh' 'exec "/opt/aux-proton-drive-bridge/${appImageName}" --appimage-extract-and-run "$@"' > "\${pkgdir}/usr/bin/aux-proton-drive-bridge"
-  chmod 755 "\${pkgdir}/usr/bin/aux-proton-drive-bridge"
-  install -Dm644 "\${srcdir}/LICENSE" "\${pkgdir}/usr/share/licenses/aux-proton-drive-bridge/LICENSE"
-
   cd "\${srcdir}"
   chmod +x "${appImageName}"
   "./${appImageName}" --appimage-extract >/dev/null
+
+  install -dm755 "\${pkgdir}/opt/aux-proton-drive-bridge" "\${pkgdir}/usr/bin"
+  cp -a squashfs-root/. "\${pkgdir}/opt/aux-proton-drive-bridge/"
+  chmod -R a+rX "\${pkgdir}/opt/aux-proton-drive-bridge"
+  printf '%s\\n' '#!/bin/sh' 'appdir=/opt/aux-proton-drive-bridge' 'export APPDIR="$appdir"' 'export LD_LIBRARY_PATH="$appdir/usr/lib\${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"' 'exec "$appdir/aux-proton-drive-bridge" "$@"' > "\${pkgdir}/usr/bin/aux-proton-drive-bridge"
+  chmod 755 "\${pkgdir}/usr/bin/aux-proton-drive-bridge"
+  install -Dm644 "\${srcdir}/LICENSE" "\${pkgdir}/usr/share/licenses/aux-proton-drive-bridge/LICENSE"
+
   if compgen -G "squashfs-root/usr/share/applications/*.desktop" > /dev/null; then
     install -Dm644 squashfs-root/usr/share/applications/*.desktop -t "\${pkgdir}/usr/share/applications"
   elif [[ -f squashfs-root/aux-proton-drive-bridge.desktop ]]; then
@@ -49,6 +51,7 @@ package() {
   fi
   if [[ -d squashfs-root/usr/share/icons ]]; then
     cp -a squashfs-root/usr/share/icons "\${pkgdir}/usr/share/"
+    chmod -R a+rX "\${pkgdir}/usr/share/icons"
   elif [[ -f squashfs-root/aux-proton-drive-bridge.png ]]; then
     install -Dm644 squashfs-root/aux-proton-drive-bridge.png "\${pkgdir}/usr/share/icons/hicolor/256x256/apps/aux-proton-drive-bridge.png"
   fi
@@ -70,6 +73,10 @@ const srcinfo = `pkgbase = aux-proton-drive-bridge-bin
 \tdepends = proton-drive-cli
 \tdepends = libsecret
 \tdepends = xdg-utils
+\tdepends = nss
+\tdepends = gtk3
+\tdepends = alsa-lib
+\tdepends = libxss
 \tprovides = aux-proton-drive-bridge
 \tconflicts = aux-proton-drive-bridge
 \toptions = !strip

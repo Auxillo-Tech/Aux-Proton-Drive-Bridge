@@ -10,7 +10,7 @@ Pont de bureau Linux non officiel pour Proton Drive utilisant la CLI officielle 
 
 ## Statut
 
-Version **`0.3.0`** - Synchronisation complète, file d'attente de transfert, résolution de conflits et prise en charge du montage FUSE.
+Version **`0.3.3`** - Synchronisation complète, file d'attente de transfert, résolution de conflits et prise en charge du montage FUSE.
 
 Aux Proton Drive Bridge offre aux utilisateurs Linux une interface graphique pour les opérations Proton Drive via la CLI officielle de Proton.
 
@@ -33,21 +33,21 @@ Aux Proton Drive Bridge offre aux utilisateurs Linux une interface graphique pou
 ### AppImage
 Télécharger et exécuter :
 ```
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
 ```
 Rendre exécutable et lancer depuis le gestionnaire de fichiers ou le terminal.
 
 ### Debian / Ubuntu / Mint / Pop!_OS
 Télécharger :
 ```
-Aux.Proton.Drive.Bridge-0.3.0-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
 ```
 Installer avec l'installateur graphique ou avec `apt`/`dpkg`.
 
 ### Fedora / RHEL / openSUSE
 Télécharger :
 ```
-Aux.Proton.Drive.Bridge-0.3.0-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
 ```
 Installer avec l'installateur graphique, `dnf`, `zypper` ou `rpm`.
 
