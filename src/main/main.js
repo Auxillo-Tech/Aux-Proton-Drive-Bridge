@@ -305,6 +305,9 @@ function getSyncEngine() {
     syncEngine.on('remote_change', (payload) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:remoteChange', sanitizeForStorage(payload));
     });
+    syncEngine.on('activity', (payload) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:syncActivity', sanitizeForStorage(payload));
+    });
     syncEngine.on('sync_complete', (payload) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:syncComplete', sanitizeForStorage(payload));
       try {
@@ -316,6 +319,19 @@ function getSyncEngine() {
       try {
         if (payload.message && !payload.message.includes('Skipping')) new Notification({ title: 'Sync error', body: payload.message }).show();
       } catch {}
+    });
+    syncEngine.on('sync_scan_complete', (payload) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:syncScanComplete', sanitizeForStorage(payload));
+    });
+    syncEngine.on('started', (payload) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:syncActivity', sanitizeForStorage({
+        phase: 'scanning_local', message: 'Sync started', ...(payload || {})
+      }));
+    });
+    syncEngine.on('stopped', (payload) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('proton:syncActivity', sanitizeForStorage({
+        phase: 'idle', message: 'Sync stopped', ...(payload || {})
+      }));
     });
   }
   return syncEngine;

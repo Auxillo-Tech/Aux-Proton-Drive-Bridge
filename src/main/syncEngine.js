@@ -77,6 +77,26 @@ function createSyncEngine(options = {}) {
   const activeUploadTransferByPath = new Map();
   const debounceTimers = new Map();
   const listeners = new Map();
+  let activity = {
+    phase: 'idle',
+    currentPath: null,
+    listed: 0,
+    paired: 0,
+    conflictsOpened: 0,
+    queued: 0,
+    message: '',
+    updatedAt: null
+  };
+
+  function setActivity(patch = {}) {
+    activity = {
+      ...activity,
+      ...patch,
+      updatedAt: new Date().toISOString()
+    };
+    emit('activity', { ...activity });
+    return activity;
+  }
 
   function rememberOwnUploadDigest(remotePath, digest) {
     if (!syncDb.rememberOwnUploadDigest) return;
@@ -482,7 +502,7 @@ function createSyncEngine(options = {}) {
     }
   }
 
-  async function listRemoteTree(root = '/my-files', expectedGeneration = null) {
+  async function listRemoteTree(root = '/my-files', expectedGeneration = null, onBatch = null) {
     const pending = [{ remotePath: root, segments: [], depth: 0 }];
     const all = [];
     let inspectedCount = 0;
@@ -491,12 +511,18 @@ function createSyncEngine(options = {}) {
       throwIfCancelled(expectedGeneration, 'Remote traversal cancelled');
       const current = pending[pendingIndex++];
       if (current.depth > MAX_REMOTE_DEPTH) throw new Error(`Remote tree exceeded maximum depth ${MAX_REMOTE_DEPTH}`);
+      setActivity({
+        phase: 'listing_remote',
+        currentPath: current.remotePath,
+        message: `Listing ${current.remotePath}`
+      });
       const result = await protonRunner('list', { path: current.remotePath, logLevel: 'ERROR' });
       throwIfCancelled(expectedGeneration, 'Remote traversal cancelled');
       const listedItems = customListParser
         ? await customListParser(result.stdout)
         : await parseListOutputAsync(result.stdout, { requireJson: true });
       throwIfCancelled(expectedGeneration, 'Remote traversal cancelled');
+      const batch = [];
       for (const item of listedItems) {
         inspectedCount += 1;
         if (inspectedCount % SCAN_YIELD_EVERY === 0) {
@@ -508,7 +534,17 @@ function createSyncEngine(options = {}) {
         const remotePath = normalizeRemotePath(current.remotePath, item.name);
         const remote = { ...item, path: remotePath, segments: [...current.segments, item.name] };
         all.push(remote);
+        batch.push(remote);
         if (remote.type === 'folder') pending.push({ remotePath, segments: remote.segments, depth: current.depth + 1 });
+      }
+      setActivity({
+        phase: 'listing_remote',
+        currentPath: current.remotePath,
+        listed: all.length,
+        message: `Listed ${all.length} remote item(s); latest folder ${current.remotePath}`
+      });
+      if (typeof onBatch === 'function' && batch.length) {
+        await onBatch(batch, current.remotePath);
       }
     }
     return all;
@@ -789,20 +825,14 @@ function createSyncEngine(options = {}) {
     }
   }
 
-  async function pollRemote(expectedGeneration = null, expectedRequestVersion = null) {
-    const status = await statusProvider();
-    throwIfCancelled(expectedGeneration, 'Remote poll cancelled');
-    if (status.busy || !status.authenticated || !status.installed) {
-      emit('warn', { message: 'Skipping remote poll: CLI not ready', status });
-      return { authoritative: false, items: [], reason: 'cli-not-ready', status };
-    }
-
-    const items = await listRemoteTree('/my-files', expectedGeneration);
-    const supersededSnapshot = () => ({ authoritative: true, items, superseded: true });
-    if (authoritativeRequestSuperseded(expectedRequestVersion)) return supersededSnapshot();
-    const seen = new Set();
-    const changeCounts = { created: 0, modified: 0, deleted: 0 };
+  async function processRemoteBatch(items, context) {
+    const {
+      seen, changeCounts, expectedGeneration, expectedRequestVersion
+    } = context;
+    const supersededSnapshot = () => ({ authoritative: true, items: [], superseded: true });
     let processedRemoteItems = 0;
+    let paired = 0;
+    let conflictsOpened = 0;
     for (const item of items) {
       if (processedRemoteItems > 0 && processedRemoteItems % SCAN_YIELD_EVERY === 0) {
         await yieldToEventLoop();
@@ -822,7 +852,8 @@ function createSyncEngine(options = {}) {
       const existing = syncDb.getTrackedFileByPath(remotePath);
       if (!existing) {
         if (local) {
-          recordConflict(local, remote, null);
+          const conflict = recordConflict(local, remote, null);
+          if (conflict) conflictsOpened++;
         } else {
           const id = syncDb.upsertTrackedFile({
             remotePath, localPath, type: item.type, size: item.size, remoteSize: item.size,
@@ -869,7 +900,6 @@ function createSyncEngine(options = {}) {
           });
         }
 
-        // Only absorb a remote revision we know came from the cancelled upload.
         if (remote.hash && expectedRemoteHash && remote.hash === expectedRemoteHash) {
           syncDb.adoptRemoteBaselineForReupload(remotePath, {
             remoteHash: remote.hash,
@@ -879,39 +909,36 @@ function createSyncEngine(options = {}) {
           continue;
         }
 
-        // A different verified remote digest means a concurrent remote edit, not our upload.
-        // Last-synced baseline or intermediate own upload is listing lag, not third-party.
         if (remote.hash && expectedRemoteHash && remote.hash !== expectedRemoteHash) {
           if (!isRemoteStillPropagationLag(existing, remote.hash, remote.size)) {
-            recordConflict(local || {
+            const conflict = recordConflict(local || {
               path: existing.local_path,
               modified: existing.local_modified,
               size: existing.local_size ?? existing.size,
               hash: existing.local_hash,
               type: existing.type
             }, remote, existing);
+            if (conflict) conflictsOpened++;
           }
           continue;
         }
 
-        // Pin missing: if remote advanced past the last fully synchronized revision, do not
-        // silently replace it. Conflict instead of overwrite — unless it is our intermediate.
         if (remote.hash && !expectedRemoteHash) {
           const syncedRemote = existing.synced_remote_hash || null;
           if (syncedRemote && syncedRemote !== 'legacy:unknown' && remote.hash !== syncedRemote &&
               !isOwnPriorRemoteDigest(remotePath, remote.hash)) {
-            recordConflict(local || {
+            const conflict = recordConflict(local || {
               path: existing.local_path,
               modified: existing.local_modified,
               size: existing.local_size ?? existing.size,
               hash: existing.local_hash,
               type: existing.type
             }, remote, existing);
+            if (conflict) conflictsOpened++;
           }
           continue;
         }
 
-        // No verified remote digest yet, or remote still matches last sync: keep waiting to re-upload.
         continue;
       }
 
@@ -929,9 +956,6 @@ function createSyncEngine(options = {}) {
       );
       const localPending = ['local_new', 'local_modified', 'pending_upload', 'local_deleted'].includes(existing.sync_state);
 
-      // First pairing: local tree was scanned before/without a remote baseline (common after a
-      // bulk download). If the remote already has the same type and size, establish sync state
-      // instead of marking every path as both_create and trying to re-upload hundreds of GB.
       if (existing.sync_state === 'local_new' && local && remote && local.type === remote.type) {
         const sizesMatch = local.type === 'folder' || Number(local.size || 0) === Number(remote.size || 0);
         if (sizesMatch) {
@@ -948,21 +972,25 @@ function createSyncEngine(options = {}) {
             remoteHash: remote.hash
           });
           syncDb.markSynced(remotePath);
+          paired++;
           continue;
         }
-        recordConflict(local, remote, null);
+        const conflict = recordConflict(local, remote, null);
+        if (conflict) conflictsOpened++;
         continue;
       }
 
       if ((localPending && existing.sync_state !== 'local_deleted') || (remoteChanged && localPending)) {
-        recordConflict(local || {
+        const conflict = recordConflict(local || {
           path: existing.local_path, modified: existing.local_modified, size: existing.local_size ?? existing.size,
           hash: existing.local_hash, type: existing.type
         }, remote, existing);
+        if (conflict) conflictsOpened++;
         continue;
       }
       if (existing.sync_state === 'local_deleted' && remoteChanged) {
-        recordConflict(null, remote, existing);
+        const conflict = recordConflict(null, remote, existing);
+        if (conflict) conflictsOpened++;
         continue;
       }
 
@@ -980,8 +1008,64 @@ function createSyncEngine(options = {}) {
         syncDb.markSynced(remotePath);
       }
     }
+    return { paired, conflictsOpened, superseded: false };
+  }
 
+  async function pollRemote(expectedGeneration = null, expectedRequestVersion = null) {
+    const status = await statusProvider();
+    throwIfCancelled(expectedGeneration, 'Remote poll cancelled');
+    if (status.busy || !status.authenticated || !status.installed) {
+      emit('warn', { message: 'Skipping remote poll: CLI not ready', status });
+      setActivity({ phase: 'idle', message: 'CLI not ready for remote poll' });
+      return { authoritative: false, items: [], reason: 'cli-not-ready', status };
+    }
+
+    const seen = new Set();
+    const changeCounts = { created: 0, modified: 0, deleted: 0 };
+    let pairedTotal = 0;
+    let conflictsTotal = 0;
+    setActivity({
+      phase: 'listing_remote',
+      currentPath: '/my-files',
+      listed: 0,
+      paired: 0,
+      conflictsOpened: 0,
+      message: 'Starting remote listing'
+    });
+
+    const items = await listRemoteTree('/my-files', expectedGeneration, async (batch, folderPath) => {
+      if (authoritativeRequestSuperseded(expectedRequestVersion)) return;
+      setActivity({
+        phase: 'reconciling',
+        currentPath: folderPath,
+        listed: seen.size + batch.length,
+        message: `Pairing ${folderPath}`
+      });
+      const result = await processRemoteBatch(batch, {
+        seen, changeCounts, expectedGeneration, expectedRequestVersion
+      });
+      if (result?.superseded) return;
+      pairedTotal += Number(result?.paired || 0);
+      conflictsTotal += Number(result?.conflictsOpened || 0);
+      setActivity({
+        phase: 'listing_remote',
+        currentPath: folderPath,
+        listed: seen.size,
+        paired: pairedTotal,
+        conflictsOpened: conflictsTotal,
+        message: `Remote ${seen.size} listed · ${pairedTotal} paired · ${conflictsTotal} conflicts`
+      });
+    });
+    const supersededSnapshot = () => ({ authoritative: true, items, superseded: true });
     if (authoritativeRequestSuperseded(expectedRequestVersion)) return supersededSnapshot();
+
+    setActivity({
+      phase: 'reconciling',
+      currentPath: null,
+      listed: items.length,
+      paired: pairedTotal,
+      message: 'Checking for remote deletions'
+    });
     let checkedTrackedItems = 0;
     for (const existing of syncDb.listTrackedFiles()) {
       if (checkedTrackedItems > 0 && checkedTrackedItems % SCAN_YIELD_EVERY === 0) {
@@ -992,8 +1076,6 @@ function createSyncEngine(options = {}) {
       checkedTrackedItems++;
       if (existing.remote_path === '__checkpoint__' || !existing.remote_path.startsWith('/my-files/')) continue;
       if (seen.has(existing.remote_path) || ['local_new', 'pending_upload', 'uploading', 'conflict', 'remote_deleted'].includes(existing.sync_state)) continue;
-      // A cancelled upload waiting to re-upload is not a remote delete, even if the listing is
-      // briefly empty while the remote revision propagates.
       if (Number(existing.upload_reupload_pending) === 1) continue;
       const local = existing.local_path && fs.existsSync(existing.local_path)
         ? localMetadata(existing.local_path, fs.lstatSync(existing.local_path)) : null;
@@ -1007,7 +1089,15 @@ function createSyncEngine(options = {}) {
     }
     const totalChanges = changeCounts.created + changeCounts.modified + changeCounts.deleted;
     if (totalChanges) emit('remote_change', { type: 'scan_summary', counts: changeCounts, total: totalChanges });
-    emit('remote_poll', { count: items.length, ts: new Date().toISOString() });
+    emit('remote_poll', { count: items.length, paired: pairedTotal, ts: new Date().toISOString() });
+    setActivity({
+      phase: 'complete',
+      currentPath: null,
+      listed: items.length,
+      paired: pairedTotal,
+      conflictsOpened: conflictsTotal,
+      message: `Remote pass complete · ${items.length} listed · ${pairedTotal} paired`
+    });
     return { authoritative: true, items };
   }
 
@@ -1366,7 +1456,9 @@ function createSyncEngine(options = {}) {
       try {
         recoverStaleStates();
         emit('sync_start', { ts: new Date().toISOString() });
+        setActivity({ phase: 'scanning_local', currentPath: activeFolder, message: 'Scanning local folder', listed: 0, paired: 0, queued: 0 });
         if (canUpload()) await scanLocalTree(activeFolder, generation);
+        setActivity({ phase: 'listing_remote', message: 'Listing remote tree' });
         const remoteSnapshot = await pollRemote(generation, requestVersionAtStart);
         if (generation !== lifecycleGeneration) return { stopped: true, queued: 0 };
         if (!remoteSnapshot.authoritative) {
@@ -1378,7 +1470,9 @@ function createSyncEngine(options = {}) {
           return { ok: true, deferred: true, queued: 0, remoteCount: remoteItems.length };
         }
         watcherSyncDeferred = false;
+        setActivity({ phase: 'transferring', message: 'Queueing transfers' });
         const result = await syncPending();
+        setActivity({ phase: result.queued ? 'transferring' : 'complete', queued: result.queued || 0, message: result.queued ? `Queued ${result.queued} transfer(s)` : 'No transfers needed' });
         emit('sync_scan_complete', { ...result, remoteCount: remoteItems.length, ts: new Date().toISOString() });
         const counts = syncDb.countByState();
         const unresolved = ['pending_upload', 'pending_download', 'uploading', 'downloading', 'local_new', 'remote_new', 'local_modified', 'remote_modified', 'conflict']
@@ -1465,6 +1559,7 @@ function createSyncEngine(options = {}) {
       if (activeCyclePromise) {
         try { await activeCyclePromise; } catch {}
       }
+      setActivity({ phase: 'idle', currentPath: null, message: 'Sync stopped' });
       emit('stopped', { ts: new Date().toISOString() });
       return true;
     })();
@@ -1503,7 +1598,8 @@ function createSyncEngine(options = {}) {
       localFolder: activeFolder,
       lastCheckpoint: syncDb.getLastCheckpoint(),
       stats: syncDb.getStats(),
-      conflictStats: conflictStore?.getStats() || null
+      conflictStats: conflictStore?.getStats() || null,
+      activity: { ...activity }
     };
   }
 

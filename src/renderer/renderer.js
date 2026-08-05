@@ -289,9 +289,13 @@ async function refreshSyncDashboard() {
     const engineState = await api.syncEngine.getState();
     if (engineState) {
       activityState.engineActive = Boolean(engineState.engineActive);
+      activityState.syncing = Boolean(engineState.isRunning);
+      applySyncActivity(engineState.activity || null, { fromPoll: true });
+      const phase = engineState.activity?.phase || (engineState.isRunning ? 'running' : engineState.engineActive ? 'active' : 'idle');
+      const label = formatSyncPhase(phase, engineState.activity);
       $('syncIcon').textContent = engineState.isRunning ? '🔄' : (engineState.engineActive ? '▶' : '⏸');
-      $('syncStatusText').textContent = engineState.isRunning ? 'Syncing…' : engineState.engineActive ? 'Active' : 'Stopped';
-      updateSyncIndicator(Boolean(engineState.isRunning), $('syncStatusText').textContent);
+      $('syncStatusText').textContent = label;
+      updateSyncIndicator(Boolean(engineState.isRunning), label);
       updateActivityBar();
     }
 
@@ -749,7 +753,20 @@ $('updateApplyBtn').addEventListener('click', async () => {
 let autoRefreshTimer = null;
 const AUTO_REFRESH_MS = 5000; // 5 seconds
 let currentTab = 'files';
-let activityState = { syncing: false, uploading: 0, downloading: 0, lastSync: '—', engineActive: false };
+let activityState = {
+  syncing: false,
+  uploading: 0,
+  downloading: 0,
+  lastSync: '—',
+  engineActive: false,
+  phase: 'idle',
+  currentPath: null,
+  listed: 0,
+  paired: 0,
+  queued: 0,
+  conflictsOpened: 0,
+  message: ''
+};
 
 function startAutoRefresh() {
   if (autoRefreshTimer) return;
@@ -773,10 +790,57 @@ async function refreshCurrentTab() {
 
 // ── Live activity bar ─────────────────────────────────────
 
+function formatSyncPhase(phase, activity = null) {
+  switch (phase) {
+    case 'scanning_local': return 'Scanning local…';
+    case 'listing_remote': return activity?.currentPath ? `Listing ${activity.currentPath}` : 'Listing remote…';
+    case 'reconciling': return 'Pairing local/remote…';
+    case 'transferring': return activity?.queued ? `Transferring (${activity.queued})` : 'Transferring…';
+    case 'complete': return 'Pass complete';
+    case 'error': return 'Sync error';
+    case 'idle': return activityState.engineActive ? 'Watching' : 'Stopped';
+    default: return activityState.syncing ? 'Syncing…' : (activityState.engineActive ? 'Active' : 'Stopped');
+  }
+}
+
+function applySyncActivity(activity, { fromPoll = false } = {}) {
+  if (!activity && !fromPoll) return;
+  const a = activity || {};
+  if (a.phase) activityState.phase = a.phase;
+  if (a.currentPath !== undefined) activityState.currentPath = a.currentPath || null;
+  if (Number.isFinite(a.listed)) activityState.listed = a.listed;
+  if (Number.isFinite(a.paired)) activityState.paired = a.paired;
+  if (Number.isFinite(a.queued)) activityState.queued = a.queued;
+  if (Number.isFinite(a.conflictsOpened)) activityState.conflictsOpened = a.conflictsOpened;
+  if (a.message) activityState.message = a.message;
+  if (a.phase && a.phase !== 'idle' && a.phase !== 'complete') activityState.syncing = true;
+  if (a.phase === 'idle' || a.phase === 'complete') activityState.syncing = Boolean(activityState.engineActive && a.phase !== 'idle' ? false : activityState.syncing && a.phase !== 'idle');
+  if (a.phase === 'idle') activityState.syncing = false;
+  if (a.phase === 'complete') {
+    activityState.syncing = false;
+    activityState.lastSync = new Date().toLocaleTimeString();
+  }
+
+  if ($('syncPhaseText')) $('syncPhaseText').textContent = formatSyncPhase(activityState.phase || 'idle', activityState);
+  if ($('syncCurrentPath')) $('syncCurrentPath').textContent = activityState.currentPath || '—';
+  if ($('syncListedCount')) $('syncListedCount').textContent = String(activityState.listed || 0);
+  if ($('syncPairedCount')) $('syncPairedCount').textContent = String(activityState.paired || 0);
+  if ($('syncQueuedCount')) $('syncQueuedCount').textContent = String(activityState.queued || 0);
+  if ($('syncConflictLiveCount')) $('syncConflictLiveCount').textContent = String(activityState.conflictsOpened || 0);
+  if ($('syncLiveMessage')) {
+    $('syncLiveMessage').textContent = activityState.message
+      || 'Start sync to see live progress. Files list is a snapshot, not transfer progress.';
+  }
+  const panel = $('syncLivePanel');
+  if (panel) panel.classList.toggle('active', Boolean(activityState.syncing || (activityState.phase && activityState.phase !== 'idle')));
+  updateSyncIndicator(Boolean(activityState.syncing), formatSyncPhase(activityState.phase || 'idle', activityState));
+  updateActivityBar();
+}
+
 function updateActivityBar() {
   const bar = $('activityBar');
   if (!bar) return;
-  const { syncing, uploading, downloading, lastSync, engineActive } = activityState;
+  const { syncing, uploading, downloading, lastSync, engineActive, phase, currentPath, listed, paired, message } = activityState;
 
   if (uploading > 0 || downloading > 0) {
     bar.className = 'activity-bar active';
@@ -784,12 +848,18 @@ function updateActivityBar() {
     if (uploading > 0) parts.push(`↑ ${uploading} uploading`);
     if (downloading > 0) parts.push(`↓ ${downloading} downloading`);
     bar.textContent = `🔄 ${parts.join(' · ')}`;
-  } else if (syncing) {
+  } else if (syncing || (phase && !['idle', 'complete'].includes(phase))) {
     bar.className = 'activity-bar active';
-    bar.textContent = '🔄 Scanning for changes…';
+    const bits = [formatSyncPhase(phase || 'running', activityState)];
+    if (listed) bits.push(`${listed} listed`);
+    if (paired) bits.push(`${paired} paired`);
+    if (currentPath) bits.push(currentPath);
+    bar.textContent = `🔄 ${bits.join(' · ')}`;
   } else if (engineActive) {
     bar.className = 'activity-bar';
-    bar.textContent = `✓ All synced · Last sync: ${lastSync}`;
+    bar.textContent = message && phase === 'complete'
+      ? `✓ ${message} · Last: ${lastSync}`
+      : `✓ Watching · Last sync: ${lastSync}`;
   } else {
     bar.className = 'activity-bar';
     bar.textContent = 'Sync stopped';
@@ -872,6 +942,8 @@ api.onSyncComplete((payload) => {
   log(payload.verified ? 'Sync completed and verified.' : 'Sync scan completed.', 'info');
   activityState.lastSync = new Date().toLocaleTimeString();
   activityState.syncing = false;
+  activityState.phase = 'complete';
+  applySyncActivity(activityState);
   updateActivityBar();
   refreshSyncDashboard().catch(() => {});
   refreshConflicts().catch(() => {});
@@ -880,9 +952,35 @@ api.onSyncComplete((payload) => {
 api.onSyncError((payload) => {
   log(`Sync error: ${payload.message}`, 'error');
   activityState.syncing = false;
+  activityState.phase = 'error';
+  activityState.message = payload.message || 'Sync error';
+  applySyncActivity(activityState);
   updateActivityBar();
   showToast(`✗ Sync error: ${payload.message}`, 'error', 6000);
 });
+
+if (typeof api.onSyncActivity === 'function') {
+  api.onSyncActivity((payload = {}) => {
+    applySyncActivity(payload);
+    if (payload.message) log(payload.message, 'info');
+    if (payload.phase === 'reconciling' || payload.phase === 'complete' || payload.paired) {
+      refreshSyncDashboard().catch(() => {});
+    }
+  });
+}
+
+if (typeof api.onSyncScanComplete === 'function') {
+  api.onSyncScanComplete((payload = {}) => {
+    activityState.queued = Number(payload.queued || 0);
+    activityState.phase = payload.queued ? 'transferring' : 'complete';
+    activityState.message = payload.queued
+      ? `Queued ${payload.queued} transfer(s); ${payload.remaining || 0} remaining`
+      : 'Scan complete; no transfers needed';
+    applySyncActivity(activityState);
+    refreshSyncDashboard().catch(() => {});
+    refreshQueue().catch(() => {});
+  });
+}
 
 api.onLocalChange((payload) => {
   log(`Local change: ${payload.type} ${payload.path}`, 'info');

@@ -138,6 +138,23 @@
           <div class="stat-card"><strong id="syncEvents">0</strong><small>Events</small></div>
           <div class="stat-card"><strong id="syncDbSize">—</strong><small>DB Size</small></div>
         </div>
+        <div id="syncLivePanel" class="sync-live-panel" aria-live="polite">
+          <div class="sync-live-row">
+            <span class="sync-live-label">Phase</span>
+            <strong id="syncPhaseText">Idle</strong>
+          </div>
+          <div class="sync-live-row">
+            <span class="sync-live-label">Current</span>
+            <code id="syncCurrentPath">—</code>
+          </div>
+          <div class="sync-live-metrics">
+            <span><strong id="syncListedCount">0</strong> listed</span>
+            <span><strong id="syncPairedCount">0</strong> paired</span>
+            <span><strong id="syncQueuedCount">0</strong> queued</span>
+            <span><strong id="syncConflictLiveCount">0</strong> conflicts</span>
+          </div>
+          <p id="syncLiveMessage" class="sync-live-message">Start sync to see live progress. Files list is a snapshot, not transfer progress.</p>
+        </div>
         <div class="sync-mode-warn">
           ⚠ Bidirectional sync is experimental. Start with Conservative mode and verify behavior.
         </div>
