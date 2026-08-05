@@ -928,11 +928,37 @@ function createSyncEngine(options = {}) {
         remoteHashBaselineUnknown || remoteHashChanged
       );
       const localPending = ['local_new', 'local_modified', 'pending_upload', 'local_deleted'].includes(existing.sync_state);
+
+      // First pairing: local tree was scanned before/without a remote baseline (common after a
+      // bulk download). If the remote already has the same type and size, establish sync state
+      // instead of marking every path as both_create and trying to re-upload hundreds of GB.
+      if (existing.sync_state === 'local_new' && local && remote && local.type === remote.type) {
+        const sizesMatch = local.type === 'folder' || Number(local.size || 0) === Number(remote.size || 0);
+        if (sizesMatch) {
+          syncDb.upsertTrackedFile({
+            remotePath,
+            localPath: existing.local_path || localPath,
+            type: local.type,
+            size: remote.size ?? local.size,
+            localSize: local.size,
+            remoteSize: remote.size,
+            localModified: local.modified,
+            remoteModified: remote.modified,
+            localHash: local.hash,
+            remoteHash: remote.hash
+          });
+          syncDb.markSynced(remotePath);
+          continue;
+        }
+        recordConflict(local, remote, null);
+        continue;
+      }
+
       if ((localPending && existing.sync_state !== 'local_deleted') || (remoteChanged && localPending)) {
         recordConflict(local || {
           path: existing.local_path, modified: existing.local_modified, size: existing.local_size ?? existing.size,
           hash: existing.local_hash, type: existing.type
-        }, remote, existing.sync_state === 'local_new' ? null : existing);
+        }, remote, existing);
         continue;
       }
       if (existing.sync_state === 'local_deleted' && remoteChanged) {
