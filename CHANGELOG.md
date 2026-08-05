@@ -6,7 +6,7 @@ https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases
 
 ## 0.3.4 - 2026-08-05
 
-Auth and session reliability fix.
+Auth and session reliability fix, plus first-time local/remote pairing.
 
 ### Fixed
 
@@ -21,6 +21,9 @@ Auth and session reliability fix.
 - Auth buttons ignore spam clicks while another action is already running
 - Status refresh can force a live CLI probe after login/logout
 - Sync start warns when tens of thousands of local items are pending
+- After a bulk download, paths already present on both sides with the same type
+  and size are paired as synced instead of becoming thousands of `both_create`
+  conflicts or re-upload attempts for hundreds of GB
 
 ## 0.3.3 - 2026-08-03
 

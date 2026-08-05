@@ -2126,4 +2126,48 @@ describe('syncEngine - end-to-end state orchestration', () => {
     assert.strictEqual(remotePolls, 0, 'stopped remote poll still reported completion');
     assert.ok(db.listTrackedFiles().length < 300, 'stopped remote poll persisted the entire listing');
   });
+
+  it('pairs matching local_new files/folders with same-size remote instead of both_create', async () => {
+    const folder = path.join(dir, 'pair-folder');
+    fs.mkdirSync(folder);
+    const localPath = path.join(folder, 'same.txt');
+    fs.writeFileSync(localPath, 'same-bytes');
+    const mismatch = path.join(dir, 'diff.txt');
+    fs.writeFileSync(mismatch, 'local-only-longer');
+    db.upsertTrackedFile({ remotePath: '/my-files/pair-folder', localPath: folder, type: 'folder', syncState: 'local_new' });
+    db.upsertTrackedFile({
+      remotePath: '/my-files/pair-folder/same.txt', localPath, type: 'file',
+      localSize: 10, localModified: fs.statSync(localPath).mtime.toISOString(), syncState: 'local_new'
+    });
+    db.upsertTrackedFile({
+      remotePath: '/my-files/diff.txt', localPath: mismatch, type: 'file',
+      localSize: fs.statSync(mismatch).size, localModified: fs.statSync(mismatch).mtime.toISOString(), syncState: 'local_new'
+    });
+    remoteOutput = (args = {}) => {
+      const target = args.path || '/my-files';
+      if (target === '/my-files') {
+        return JSON.stringify([
+          { name: { ok: true, value: 'pair-folder' }, type: 'folder' },
+          {
+            name: { ok: true, value: 'diff.txt' }, type: 'file',
+            activeRevision: { value: { claimedSize: 4, claimedModificationTime: '2026-08-03T12:00:00Z' } }
+          }
+        ]);
+      }
+      if (target === '/my-files/pair-folder') {
+        return JSON.stringify([{
+          name: { ok: true, value: 'same.txt' }, type: 'file',
+          activeRevision: { value: { claimedSize: 10, claimedModificationTime: '2026-08-03T12:00:00Z' } }
+        }]);
+      }
+      return '[]';
+    };
+    const snapshot = await engine.pollRemote();
+    assert.strictEqual(snapshot.authoritative, true);
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/pair-folder')?.sync_state, 'synced');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/pair-folder/same.txt')?.sync_state, 'synced');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/diff.txt')?.sync_state, 'conflict');
+    assert.strictEqual(store.listActive().length, 1);
+  });
+
 });
