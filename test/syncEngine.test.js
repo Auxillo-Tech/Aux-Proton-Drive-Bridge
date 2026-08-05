@@ -2170,4 +2170,85 @@ describe('syncEngine - end-to-end state orchestration', () => {
     assert.strictEqual(store.listActive().length, 1);
   });
 
+
+  it('exposes live activity while listing remote folders', async () => {
+    const activities = [];
+    engine.on('activity', payload => activities.push(payload));
+    const localPath = path.join(dir, 'live.txt');
+    fs.writeFileSync(localPath, 'live-data');
+    db.upsertTrackedFile({
+      remotePath: '/my-files/live.txt', localPath, type: 'file',
+      localSize: 9, localModified: fs.statSync(localPath).mtime.toISOString(), syncState: 'local_new'
+    });
+    remoteOutput = JSON.stringify([{
+      name: { ok: true, value: 'live.txt' }, type: 'file',
+      activeRevision: { value: { claimedSize: 9, claimedModificationTime: '2026-08-05T12:00:00Z' } }
+    }]);
+    await engine.pollRemote();
+    const state = engine.getState();
+    assert.ok(state.activity);
+    assert.ok(activities.length >= 1);
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/live.txt')?.sync_state, 'synced');
+    assert.ok(['idle', 'complete', 'listing_remote', 'reconciling'].includes(state.activity.phase) || state.activity.listed >= 1);
+    assert.ok(activities.some(a => a.phase === 'listing_remote' || a.listed >= 1 || a.paired >= 1));
+  });
+
+  it('pairs folder children incrementally during remote walk before walk finishes', async () => {
+    const folder = path.join(dir, 'inc');
+    fs.mkdirSync(folder);
+    const child = path.join(folder, 'child.txt');
+    fs.writeFileSync(child, '12345');
+    db.upsertTrackedFile({ remotePath: '/my-files/inc', localPath: folder, type: 'folder', syncState: 'local_new' });
+    db.upsertTrackedFile({
+      remotePath: '/my-files/inc/child.txt', localPath: child, type: 'file',
+      localSize: 5, localModified: fs.statSync(child).mtime.toISOString(), syncState: 'local_new'
+    });
+
+    let sawChildPairedBeforeRootDone = false;
+    let rootListReleased = false;
+    let releaseChildList;
+    const childListGate = new Promise(resolve => { releaseChildList = resolve; });
+    engine.destroy();
+    engine = createSyncEngine({
+      syncDb: db,
+      transferQueue: queue,
+      conflictStore: store,
+      localFolder: dir,
+      getStatus: async () => ({ installed: true, authenticated: true, busy: false }),
+      runProton: async (_action, args = {}) => {
+        const target = args.path || '/my-files';
+        if (target === '/my-files') {
+          return {
+            code: 0, stderr: '',
+            stdout: JSON.stringify([{ name: { ok: true, value: 'inc' }, type: 'folder' }])
+          };
+        }
+        if (target === '/my-files/inc') {
+          // Before child listing returns, root folder should already be pairable after parent batch.
+          // After parent batch processing, wait for assertion window.
+          await childListGate;
+          return {
+            code: 0, stderr: '',
+            stdout: JSON.stringify([{
+              name: { ok: true, value: 'child.txt' }, type: 'file',
+              activeRevision: { value: { claimedSize: 5, claimedModificationTime: '2026-08-05T12:00:00Z' } }
+            }])
+          };
+        }
+        return { code: 0, stderr: '', stdout: '[]' };
+      }
+    });
+
+    const poll = engine.pollRemote();
+    // Give parent folder batch a moment to process
+    await new Promise(r => setTimeout(r, 30));
+    const mid = db.getTrackedFileByPath('/my-files/inc');
+    if (mid?.sync_state === 'synced') sawChildPairedBeforeRootDone = true;
+    releaseChildList();
+    await poll;
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/inc')?.sync_state, 'synced');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/inc/child.txt')?.sync_state, 'synced');
+    assert.strictEqual(sawChildPairedBeforeRootDone, true);
+  });
+
 });

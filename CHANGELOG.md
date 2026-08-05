@@ -4,6 +4,17 @@ All notable releases of Aux Proton Drive Bridge are listed here.
 The GitHub Releases page is the canonical source for installable artifacts:
 https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases
 
+## 0.3.5 - 2026-08-05
+
+Live sync standard pass.
+
+### Fixed / Added
+
+- Remote walk pairs each folder batch immediately instead of waiting for the full tree
+- Sync engine emits live activity (phase, current path, listed, paired, queued)
+- Sync tab shows live phase/current path/metrics; header and activity bar show real work
+- Files list documented as snapshot; progress lives in Sync tab + activity bar
+
 ## 0.3.4 - 2026-08-05
 
 Auth and session reliability fix, plus first-time local/remote pairing.

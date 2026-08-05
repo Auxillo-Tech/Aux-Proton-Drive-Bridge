@@ -120,6 +120,16 @@ contextBridge.exposeInMainWorld('auxProtonDriveBridge', {
     ipcRenderer.on('proton:remoteChange', handler);
     return () => ipcRenderer.removeListener('proton:remoteChange', handler);
   },
+  onSyncActivity: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('proton:syncActivity', handler);
+    return () => ipcRenderer.removeListener('proton:syncActivity', handler);
+  },
+  onSyncScanComplete: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('proton:syncScanComplete', handler);
+    return () => ipcRenderer.removeListener('proton:syncScanComplete', handler);
+  },
   onSyncComplete: (callback) => {
     const handler = (_event, payload) => callback(payload);
     ipcRenderer.on('proton:syncComplete', handler);
