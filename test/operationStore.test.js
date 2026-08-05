@@ -36,3 +36,21 @@ test('operation store redacts auth payloads and tokens', () => {
   assert.equal(generic.includes(awsLike), false);
   assert.equal(generic.includes('BEGIN PRIVATE KEY'), false);
 });
+
+test('operation store recovers stale running operations from interrupted sessions', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-proton-ops-stale-'));
+  const file = path.join(dir, 'operations.json');
+  const store = createOperationStore(file);
+  const op = store.begin('logout', {});
+  // Backdate startedAt so recovery treats it as stale.
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  data.operations[0].startedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+  data.operations[0].updatedAt = data.operations[0].startedAt;
+  fs.writeFileSync(file, JSON.stringify(data));
+  const recovered = createOperationStore(file).recoverStaleRunning(60_000);
+  assert.equal(recovered, 1);
+  const [saved] = createOperationStore(file).list();
+  assert.equal(saved.id, op.id);
+  assert.equal(saved.status, 'failed');
+  assert.match(saved.error || '', /interrupted/i);
+});

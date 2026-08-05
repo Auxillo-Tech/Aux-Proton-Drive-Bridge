@@ -31,3 +31,28 @@ test('child process environment excludes release credentials and unrelated secre
     }
   }
 });
+
+test('child process environment keeps desktop session keys needed for browser login', () => {
+  const previous = {
+    XAUTHORITY: process.env.XAUTHORITY,
+    XDG_CURRENT_DESKTOP: process.env.XDG_CURRENT_DESKTOP,
+    BROWSER: process.env.BROWSER,
+    KDE_FULL_SESSION: process.env.KDE_FULL_SESSION
+  };
+  try {
+    process.env.XAUTHORITY = '/run/user/1000/xauth';
+    process.env.XDG_CURRENT_DESKTOP = 'KDE';
+    process.env.BROWSER = 'firefox';
+    process.env.KDE_FULL_SESSION = 'true';
+    const env = buildChildEnv();
+    assert.equal(env.XAUTHORITY, '/run/user/1000/xauth');
+    assert.equal(env.XDG_CURRENT_DESKTOP, 'KDE');
+    assert.equal(env.BROWSER, 'firefox');
+    assert.equal(env.KDE_FULL_SESSION, 'true');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

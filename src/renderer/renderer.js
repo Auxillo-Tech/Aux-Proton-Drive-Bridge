@@ -200,8 +200,8 @@ function currentBackupProfileFromForm() {
   };
 }
 
-async function refreshStatus() {
-  const status = await api.getStatus();
+async function refreshStatus(options = {}) {
+  const status = await api.getStatus(options);
   setStatus(status);
   return status;
 }
@@ -219,19 +219,33 @@ function remotePathForName(name) {
   return `/my-files/${String(name).replaceAll('/', '\\/')}`;
 }
 
+let runInFlight = null;
+
 async function run(label, fn) {
+  if (runInFlight) {
+    log(`${label} skipped: another action is already running (${runInFlight}).`, 'warn');
+    return null;
+  }
+  runInFlight = label;
   try {
     log(`${label} started…`);
     const result = await fn();
     if (result?.stdout) log(result.stdout.trim());
     if (result?.stderr) log(result.stderr.trim(), 'warn');
+    if (result?.loginUrl) log(`If the browser did not open, use: ${result.loginUrl}`, 'warn');
+    if (result?.message) log(result.message, 'success');
     if (result?.queued) log(`${label} queued as ${result.transferId}.`, 'success');
-    else log(`${label} finished.`);
-    await refreshStatus();
+    else if (!result?.alreadyAuthenticated && !result?.alreadyLoggedOut) log(`${label} finished.`);
+    await refreshStatus({ force: true });
     await refreshHistory();
+    return result;
   } catch (err) {
     log(err?.message || String(err), 'error');
+    await refreshStatus({ force: true }).catch(() => undefined);
     await refreshHistory().catch(() => undefined);
+    return null;
+  } finally {
+    runInFlight = null;
   }
 }
 
@@ -312,6 +326,11 @@ $('syncStartBtn').addEventListener('click', async () => {
   const interval = parseInt($('pollIntervalSelect').value, 10);
   try {
     localStorage.setItem('aux-proton-default-sync-mode', mode);
+    const counts = await api.sync.countByState().catch(() => ({}));
+    const pendingLocal = Number(counts.local_new || 0) + Number(counts.local_modified || 0) + Number(counts.pending_upload || 0);
+    if (pendingLocal > 5000) {
+      log(`Warning: ${pendingLocal} local items need sync. First cycle will take a long time; keep the app open and do not spam buttons.`, 'warn');
+    }
     await api.syncEngine.start(mode, state.localFolder, interval);
     log(`Sync started: mode=${mode}, interval=${interval}ms`);
     refreshSyncDashboard();

@@ -14,13 +14,27 @@ If that fails, install Proton Drive CLI and make sure it is on your `PATH`.
 
 ## Login browser does not open
 
-Try logging in manually from a terminal:
+The app opens the Proton login URL itself when the CLI prints it. If the browser still does not open:
+
+1. Click **Sign in** once and watch the activity log for a line starting with `Login URL opened` or `If the browser did not open, use:`.
+2. Copy that URL into Firefox/Chrome manually and finish sign-in.
+3. Or log in from a terminal, then return to the app and click **Refresh files**:
 
 ```bash
 proton-drive auth login
 ```
 
-Complete the browser login, then restart Aux Proton Drive Bridge and click **Refresh status**.
+Keep the terminal open until it prints `Authentication successful`.
+
+## Logout stuck / button does nothing
+
+Cause: previous freezes left many `logout` operations marked `running`, or the app was killed mid-logout (`proton-drive exited null`).
+
+Fix:
+
+1. Restart Aux Proton Drive Bridge (stale running ops older than 2 minutes are auto-marked failed).
+2. Click **Log out** once (repeat clicks are ignored while an action runs).
+3. If the CLI is already signed out, the app reports **Already logged out** and unlocks **Sign in**.
 
 ## Login succeeds but app still says not authenticated
 
@@ -33,7 +47,7 @@ Try:
 proton-drive filesystem list /my-files
 ```
 
-3. If the CLI lists files, reopen Aux Proton Drive Bridge.
+3. If the CLI lists files, reopen Aux Proton Drive Bridge and click **Refresh files**.
 4. If the CLI fails, fix CLI auth/keyring first.
 
 ## Keyring / secret storage errors
