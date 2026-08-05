@@ -4,6 +4,24 @@ All notable releases of Aux Proton Drive Bridge are listed here.
 The GitHub Releases page is the canonical source for installable artifacts:
 https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases
 
+## 0.3.4 - 2026-08-05
+
+Auth and session reliability fix.
+
+### Fixed
+
+- Electron no longer strips desktop session env vars (`XAUTHORITY`,
+  `XDG_CURRENT_DESKTOP`, KDE/Qt keys) required for Proton CLI browser login
+- Sign-in now opens the Proton login URL through Electron when the CLI prints it,
+  so login works even when the spawned CLI cannot launch a browser itself
+- Log out treats already-signed-out sessions as success and recovers when the
+  CLI process is killed mid-logout (`exited null`)
+- Interrupted/running operation history is recovered on startup instead of
+  leaving logout/list stuck forever
+- Auth buttons ignore spam clicks while another action is already running
+- Status refresh can force a live CLI probe after login/logout
+- Sync start warns when tens of thousands of local items are pending
+
 ## 0.3.3 - 2026-08-03
 
 Large sync-tree stability fix.

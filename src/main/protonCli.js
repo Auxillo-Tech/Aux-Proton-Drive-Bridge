@@ -190,14 +190,33 @@ function runProtonNow(action, options = {}, eventSink) {
     child.stdout.on('data', data => emit('stdout', data));
     child.stderr.on('data', data => emit('stderr', data));
     child.on('error', error => settle(error));
-    child.on('close', code => {
-      const result = { code, stdout, stderr, command: [bin, ...args] };
-      if (code === 0) settle(null, result);
-      else {
-        const err = new Error(stderr.trim() || stdout.trim() || `proton-drive exited ${code}`);
+    child.on('close', (code, signal) => {
+      const result = { code, signal: signal || null, stdout, stderr, command: [bin, ...args] };
+      if (code === 0) {
+        // Defense: some CLI builds print auth errors with confusing exit codes.
+        const combined = `${stdout}\n${stderr}`;
+        if (action !== 'logout' && /need to login|not logged in|unauthenticated/i.test(combined)) {
+          const err = new Error(stderr.trim() || stdout.trim() || 'You need to login first');
+          err.result = result;
+          settle(err);
+          return;
+        }
+        settle(null, result);
+        return;
+      }
+      if (code === null || code === undefined) {
+        const err = new Error(
+          signal
+            ? `Proton Drive ${action} was killed (${signal}) before it finished`
+            : `Proton Drive ${action} ended without an exit code (process was interrupted)`
+        );
         err.result = result;
         settle(err);
+        return;
       }
+      const err = new Error(stderr.trim() || stdout.trim() || `proton-drive exited ${code}`);
+      err.result = result;
+      settle(err);
     });
   }));
 }
@@ -218,6 +237,15 @@ function clearStatusCache() {
   cachedStatusAt = 0;
 }
 
+function extractLoginUrl(text) {
+  const match = String(text || '').match(/https:\/\/account\.proton\.me\/desktop\/login[^\s]+/i);
+  return match ? match[0] : null;
+}
+
+function isAlreadyLoggedOutMessage(text) {
+  return /need to login|not logged in|unauthenticated|already logged out|no (active )?session/i.test(String(text || ''));
+}
+
 async function getStatus(options = {}) {
   if (!options.force && cachedStatus && Date.now() - cachedStatusAt < STATUS_CACHE_MS) return { ...cachedStatus };
   try {
@@ -228,7 +256,6 @@ async function getStatus(options = {}) {
     } catch (authErr) {
       const text = String(authErr.message || '');
       const busy = /database is locked|SQLITE_BUSY/i.test(text);
-      const needsLogin = /need to login|not logged in|unauthenticated/i.test(text);
       cachedStatus = {
         installed: true,
         version: version.stdout.trim(),
@@ -250,7 +277,9 @@ module.exports = {
   DEFAULT_LOCAL_FOLDER,
   buildCommand,
   clearStatusCache,
+  extractLoginUrl,
   getStatus,
+  isAlreadyLoggedOutMessage,
   normalizeRemotePath,
   parseListOutput,
   parseListOutputAsync,

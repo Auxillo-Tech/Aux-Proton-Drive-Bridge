@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('auxProtonDriveBridge', {
   // Core
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   getDefaultLocalFolder: () => ipcRenderer.invoke('proton:getDefaultLocalFolder'),
-  getStatus: () => ipcRenderer.invoke('proton:getStatus'),
+  getStatus: (options) => ipcRenderer.invoke('proton:getStatus', options || {}),
   listMyFiles: () => ipcRenderer.invoke('proton:listMyFiles'),
   login: () => ipcRenderer.invoke('proton:login'),
   logout: () => ipcRenderer.invoke('proton:logout'),

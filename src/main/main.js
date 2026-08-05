@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const childProcess = require('node:child_process');
 const { pathToFileURL } = require('node:url');
-const { DEFAULT_LOCAL_FOLDER, clearStatusCache, getStatus, parseListOutput, runProton, shutdownProtonProcesses } = require('./protonCli');
+const { DEFAULT_LOCAL_FOLDER, clearStatusCache, extractLoginUrl, getStatus, isAlreadyLoggedOutMessage, parseListOutput, runProton, shutdownProtonProcesses } = require('./protonCli');
 const { createOperationStore, sanitizeForStorage } = require('./operationStore');
 const { createProfileStore } = require('./profileStore');
 const { createSyncDb } = require('./syncDb');
@@ -486,20 +486,64 @@ function createWindow() {
 
 trustedHandle('app:getVersion', async () => app.getVersion());
 trustedHandle('proton:getDefaultLocalFolder', async () => externalLocalFolder || DEFAULT_LOCAL_FOLDER);
-trustedHandle('proton:getStatus', async () => getStatus());
+trustedHandle('proton:getStatus', async (_event, options = {}) => getStatus({ force: Boolean(options?.force) }));
 trustedHandle('proton:listMyFiles', async () => recordOperation('list', { path: '/my-files' }, async (eventSink) => {
   const result = await runProton('list', { path: '/my-files' }, eventSink);
   return { code: result.code, items: parseListOutput(result.stdout) };
 }));
 trustedHandle('proton:login', async () => {
-  const result = await recordOperation('login', {}, (eventSink) => runProton('login', {}, eventSink));
   clearStatusCache();
-  return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
+  const current = await getStatus({ force: true });
+  if (current.authenticated) {
+    return { ok: true, alreadyAuthenticated: true, message: 'Already signed in' };
+  }
+  let openedLoginUrl = null;
+  const result = await recordOperation('login', {}, (eventSink) => runProton('login', {}, (payload) => {
+    eventSink(payload);
+    if (!openedLoginUrl && payload?.text) {
+      const url = extractLoginUrl(payload.text);
+      if (url) {
+        openedLoginUrl = url;
+        // Electron-spawned CLI often cannot open a browser because xdg-open needs
+        // a fuller desktop session. Open the Proton login URL from the app itself.
+        shell.openExternal(url).catch(() => {});
+        sendProgress({ stream: 'system', text: `Login URL opened in browser (copy if needed): ${url}` });
+      }
+    }
+  }));
+  clearStatusCache();
+  const after = await getStatus({ force: true });
+  return {
+    ok: true,
+    authenticated: Boolean(after.authenticated),
+    loginUrl: openedLoginUrl,
+    operationId: result.operationId,
+    stdout: result.stdout,
+    stderr: result.stderr
+  };
 });
 trustedHandle('proton:logout', async () => {
-  const result = await recordOperation('logout', {}, (eventSink) => runProton('logout', {}, eventSink));
   clearStatusCache();
-  return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
+  const current = await getStatus({ force: true });
+  if (!current.authenticated) {
+    clearStatusCache();
+    return { ok: true, alreadyLoggedOut: true, message: 'Already logged out' };
+  }
+  try {
+    const result = await recordOperation('logout', {}, (eventSink) => runProton('logout', {}, eventSink));
+    clearStatusCache();
+    await getStatus({ force: true });
+    return { ok: true, operationId: result.operationId, stdout: result.stdout, stderr: result.stderr };
+  } catch (err) {
+    const message = err?.message || String(err);
+    // Treat interrupted/null-exit logout as success when CLI reports logged out afterward.
+    clearStatusCache();
+    const after = await getStatus({ force: true }).catch(() => ({ authenticated: true }));
+    if (!after.authenticated || isAlreadyLoggedOutMessage(message)) {
+      return { ok: true, recovered: true, message: 'Logged out (CLI session cleared)' };
+    }
+    throw err;
+  }
 });
 trustedHandle('proton:chooseLocalFolder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'], defaultPath: DEFAULT_LOCAL_FOLDER });
@@ -658,6 +702,12 @@ app.whenReady().then(async () => {
   }
   registerApplicationProtocol();
   grantLocalPath(DEFAULT_LOCAL_FOLDER, { label: 'Default local folder' });
+  try {
+    const recovered = getOperationStore().recoverStaleRunning();
+    if (recovered) console.log(`Recovered ${recovered} interrupted operation(s) from previous session`);
+  } catch (error) {
+    console.warn('Failed to recover interrupted operations:', error?.message || error);
+  }
   createWindow();
   createTray();
   startScheduler();

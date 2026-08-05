@@ -67,6 +67,24 @@ function createOperationStore(filePath) {
     fs.renameSync(tmp, resolved);
   }
 
+  function recoverStaleRunning(maxAgeMs = 2 * 60_000) {
+    const data = load();
+    const now = Date.now();
+    let changed = 0;
+    for (const op of data.operations) {
+      if (op.status !== 'running') continue;
+      const started = Date.parse(op.startedAt || '') || 0;
+      if (!started || now - started < maxAgeMs) continue;
+      op.status = 'failed';
+      op.finishedAt = new Date().toISOString();
+      op.updatedAt = op.finishedAt;
+      op.error = op.error || 'Operation interrupted (app quit or process killed before completion)';
+      changed += 1;
+    }
+    if (changed) save(data);
+    return changed;
+  }
+
   function begin(action, options = {}) {
     const data = load();
     const now = new Date().toISOString();
@@ -129,7 +147,7 @@ function createOperationStore(filePath) {
     save({ version: 1, operations: [] });
   }
 
-  return { filePath: resolved, begin, appendEvent, finish, list, clear, redactSensitive, sanitizeForStorage };
+  return { filePath: resolved, begin, appendEvent, finish, list, clear, recoverStaleRunning, redactSensitive, sanitizeForStorage };
 }
 
 module.exports = { createOperationStore, redactSensitive, sanitizeForStorage };

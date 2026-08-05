@@ -1,6 +1,6 @@
 {
   "name": "aux-proton-drive-bridge",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Unofficial Linux desktop bridge for Proton Drive using the official Proton Drive CLI.",
   "homepage": "https://auxillo.tech",
   "repository": {

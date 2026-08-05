@@ -105,3 +105,15 @@ test('parseListOutput maps live totalStorageSize and undecryptable-name UID fiel
   assert.strictEqual(rows[0].name, 'NODE-123');
   assert.strictEqual(rows[0].size, 987);
 });
+
+test('extractLoginUrl finds Proton desktop login links', () => {
+  const { extractLoginUrl, isAlreadyLoggedOutMessage } = require('../src/main/protonCli');
+  const text = 'Open following URL manually if browser did not open automatically:\nhttps://account.proton.me/desktop/login?app=drive&pv=3#payload=abc:cli-drive\n';
+  assert.equal(
+    extractLoginUrl(text),
+    'https://account.proton.me/desktop/login?app=drive&pv=3#payload=abc:cli-drive'
+  );
+  assert.equal(extractLoginUrl('no url here'), null);
+  assert.equal(isAlreadyLoggedOutMessage('You need to login first'), true);
+  assert.equal(isAlreadyLoggedOutMessage('ok'), false);
+});
