@@ -10,7 +10,7 @@
 
 ## 状态
 
-版本 **`0.3.3`** - 功能完整的同步、传输队列、冲突解决和 FUSE 挂载支持。
+版本 **`0.3.6`** - 可靠同步、传输队列、冲突恢复和签名更新。
 
 Aux Proton Drive Bridge 通过 Proton 官方 CLI 为 Linux 用户提供 Proton Drive 操作的图形界面。
 
@@ -25,29 +25,29 @@ Aux Proton Drive Bridge 通过 Proton 官方 CLI 为 Linux 用户提供 Proton D
 - **自动更新** - 基于 GitHub Releases 的更新检查和下载
 - **发布签名** - GPG 和 signify/minisign 签名脚本
 - **文件管理器集成** - Nautilus、Dolphin、Thunar 上下文菜单脚本
-- **可选 FUSE 挂载** - 将 Proton Drive 挂载为文件系统目录
-- **标签页界面** - 文件、同步面板、冲突、队列、FUSE 和更新分别使用独立标签页
+- **自动恢复** - 继续大型传输，并安全协调内容相同的旧冲突
+- **标签页界面** - 文件、同步面板、冲突、队列和更新分别使用独立标签页
 
 ## 快速安装
 
 ### AppImage
 下载并运行：
 ```
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
 ```
 赋予执行权限后从文件管理器或终端运行。
 
 ### Debian / Ubuntu / Mint / Pop!_OS
 下载：
 ```
-Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
 ```
 使用图形化包管理器或 `apt`/`dpkg` 安装。
 
 ### Fedora / RHEL / openSUSE
 下载：
 ```
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
 ```
 使用图形化包管理器、`dnf`、`zypper` 或 `rpm` 安装。
 
@@ -58,7 +58,7 @@ Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
 - 一个 Proton 账户
 - 用于 Proton 登录的浏览器访问
 - Proton CLI 支持的 Linux 密钥存储（KWallet、GNOME Keyring/libsecret 或 `pass`）
-- FUSE：可选，仅 FUSE 挂载功能需要
+
 
 ## 安全模型
 

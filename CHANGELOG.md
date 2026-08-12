@@ -4,6 +4,27 @@ All notable releases of Aux Proton Drive Bridge are listed here.
 The GitHub Releases page is the canonical source for installable artifacts:
 https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases
 
+## 0.3.6 - 2026-08-12
+
+Full reliability and release-hardening pass.
+
+### Fixed
+
+- Large transfers now use an inactivity timeout that resets only on distinct progress, backed by a hard maximum-duration ceiling
+- Successful 50-item queue drains request the next authoritative batch immediately instead of waiting for the next poll
+- Legacy false conflicts close automatically only when local bytes match the remote CLI-verified SHA-1 digest; unverified claimed digests are never trusted
+- Same-size first-time pairs are rejected when the remote verified digest proves that the contents differ
+- Large remote JSON listings are no longer copied into renderer events or persistent operation history, including on failed operations
+- Proton login payload URLs no longer cross into renderer state or activity history; if the browser cannot be opened, the sign-in URL is shown in a dialog
+- Affected AMD Navi 48 Linux systems select software rendering automatically at startup (via ANGLE SwiftShader)
+- In-app updater downloads the package format matching the installation (deb/rpm) and falls back to the universal AppImage on other distros
+
+### Changed
+
+- Removed the non-functional application FUSE controls because Proton Drive CLI 0.6.0 provides no mount command
+- Updated Electron, better-sqlite3, CycloneDX tooling, and audited transitive dependencies
+- Updated all nine localized READMEs and release documentation for the actual v0.3.6 feature set
+
 ## 0.3.5 - 2026-08-05
 
 Live sync standard pass.

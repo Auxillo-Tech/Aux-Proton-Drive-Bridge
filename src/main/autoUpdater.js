@@ -77,12 +77,28 @@ function verifyChecksumManifestSignature(manifest, signatureEnvelope, publicKeyP
   return true;
 }
 
+function detectLinuxPackageType(options = {}) {
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  if (platform !== 'linux') return null;
+  if (env.APPIMAGE) return 'appimage';
+  try {
+    const osRelease = fs.readFileSync(options.osReleasePath || '/etc/os-release', 'utf8').toLowerCase();
+    if (/^(?:id|id_like)=.*\b(?:debian|ubuntu)\b/m.test(osRelease)) return 'deb';
+    if (/^(?:id|id_like)=.*\b(?:fedora|rhel|centos|suse|opensuse)\b/m.test(osRelease)) return 'rpm';
+  } catch {}
+  // Anything else (Arch/AUR, unknown distros, unreadable os-release) gets the
+  // universally runnable AppImage instead of a package it cannot install.
+  return 'appimage';
+}
+
 function createAutoUpdater(options = {}) {
   const currentVersion = options.currentVersion || '0.0.0';
   const downloadDir = options.downloadDir || path.join(app?.getPath?.('userData') || process.cwd(), 'updates');
   const logger = options.logger || console;
   const releasesApi = options.releasesApi || RELEASES_API;
   const releasePublicKey = options.releasePublicKey || fs.readFileSync(DEFAULT_RELEASE_PUBLIC_KEY, 'utf8');
+  const packageType = options.packageType || detectLinuxPackageType();
   const userAgent = `${GITHUB_REPO}/${currentVersion}`;
   let updateCheckTimer = null;
   let availableUpdate = null;
@@ -223,8 +239,15 @@ function createAutoUpdater(options = {}) {
   function getBestAsset(update) {
     if (!update?.assets || !/^\d+\.\d+\.\d+$/.test(String(update.version || '')) || update.tagName !== `v${update.version}`) return null;
     if (process.platform !== 'linux') return null;
-    const arches = process.arch === 'x64' ? ['x86_64', 'x64'] : process.arch === 'arm64' ? ['arm64', 'aarch64'] : [];
-    const expectedNames = arches.map(arch => `Aux.Proton.Drive.Bridge-${update.version}-${arch}.AppImage`);
+    const archNames = process.arch === 'x64'
+      ? { appimage: 'x86_64', rpm: 'x86_64', deb: 'amd64' }
+      : process.arch === 'arm64'
+        ? { appimage: 'aarch64', rpm: 'aarch64', deb: 'arm64' }
+        : {};
+    const arch = archNames[packageType];
+    if (!arch) return null;
+    const suffix = packageType === 'appimage' ? 'AppImage' : packageType;
+    const expectedNames = [`Aux.Proton.Drive.Bridge-${update.version}-${arch}.${suffix}`];
     return update.assets.find(asset => expectedNames.includes(asset.name) && asset.state !== 'deleted') || null;
   }
 
@@ -374,5 +397,6 @@ module.exports = {
   releaseKeyId,
   sha256File,
   verifyChecksumManifestSignature,
-  verifyFileSha256
+  verifyFileSha256,
+  detectLinuxPackageType
 };

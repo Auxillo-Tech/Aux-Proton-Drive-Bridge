@@ -81,14 +81,6 @@ contextBridge.exposeInMainWorld('auxProtonDriveBridge', {
     getAvailable: () => ipcRenderer.invoke('update:getAvailable')
   },
 
-  // FUSE mount
-  fuse: {
-    mount: () => ipcRenderer.invoke('fuse:mount'),
-    unmount: () => ipcRenderer.invoke('fuse:unmount'),
-    getStatus: () => ipcRenderer.invoke('fuse:getStatus'),
-    isAvailable: () => ipcRenderer.invoke('fuse:isAvailable')
-  },
-
   // Progress / event subscriptions
   onProgress: (callback) => {
     const handler = (_event, payload) => callback(payload);

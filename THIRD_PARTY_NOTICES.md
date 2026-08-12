@@ -3,7 +3,7 @@
 This file covers production npm dependencies and bundled typefaces shipped with Aux Proton Drive Bridge.
 Electron also ships its Chromium and Electron license notices beside the packaged executable.
 
-## better-sqlite3@13.0.1
+## better-sqlite3@13.0.3
 License: MIT
 Repository: git://github.com/WiseLibs/better-sqlite3.git
 

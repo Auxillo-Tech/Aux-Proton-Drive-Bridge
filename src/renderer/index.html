@@ -45,7 +45,6 @@
       <button id="tabSync" class="tab" role="tab" aria-controls="panelSync" aria-selected="false" tabindex="-1">Sync</button>
       <button id="tabConflicts" class="tab" role="tab" aria-controls="panelConflicts" aria-selected="false" tabindex="-1">Conflicts <span id="conflictBadge" class="badge-count hidden">0</span></button>
       <button id="tabQueue" class="tab" role="tab" aria-controls="panelQueue" aria-selected="false" tabindex="-1">Queue</button>
-      <button id="tabFuse" class="tab" role="tab" aria-controls="panelFuse" aria-selected="false" tabindex="-1">FUSE Mount</button>
       <button id="tabUpdates" class="tab" role="tab" aria-controls="panelUpdates" aria-selected="false" tabindex="-1">Updates</button>
     </nav>
 
@@ -156,7 +155,7 @@
           <p id="syncLiveMessage" class="sync-live-message">Start sync to see live progress. Files list is a snapshot, not transfer progress.</p>
         </div>
         <div class="sync-mode-warn">
-          ⚠ Bidirectional sync is experimental. Start with Conservative mode and verify behavior.
+          ⚠ Sync never propagates deletion. Start with a selected folder and review conflicts before syncing a full library.
         </div>
         <div class="ignore-box">
           <h3>Selective sync — excluded patterns</h3>
@@ -215,33 +214,6 @@
         <div id="queuePending" class="file-list empty">No pending transfers.</div>
         <h3>Recent completed</h3>
         <div id="queueCompleted" class="file-list empty">No completed transfers yet.</div>
-      </section>
-    </section>
-
-    <!-- Tab: FUSE Mount -->
-    <section id="panelFuse" class="tab-panel">
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Proton Drive FUSE Mount</h2>
-        </div>
-        <div id="fuseStatus" class="fuse-status-card">
-          <div class="fuse-status-indicator">
-            <span id="fuseStateDot" class="dot"></span>
-            <strong id="fuseStateText">Checking…</strong>
-          </div>
-          <div class="fuse-detail">
-            <p><strong>Mount point:</strong> <code id="fuseMountPoint">~/ProtonDrive-FUSE</code></p>
-            <p id="fuseError" class="error-text hidden"></p>
-          </div>
-        </div>
-        <div class="fuse-controls">
-          <button id="fuseMountBtn" class="wide">Mount</button>
-          <button id="fuseUnmountBtn" class="wide secondary">Unmount</button>
-          <button id="fuseRefreshBtn" class="wide secondary">Refresh status</button>
-        </div>
-        <div class="note">
-          <strong>Note:</strong> FUSE support requires the proton-drive CLI to have mount capabilities, or a compatible FUSE wrapper. Requires <code>/dev/fuse</code> and <code>fusermount3</code> installed.
-        </div>
       </section>
     </section>
 

@@ -250,6 +250,18 @@ function createConflictStore(syncDb) {
     return { conflict: { ...conflict }, nextAction: prepared.nextAction, strategy };
   }
 
+  function confirmEquivalent(conflictId, evidence = {}) {
+    const conflict = activeConflicts.get(conflictId);
+    if (!conflict || conflict.status !== 'open') return false;
+    conflict.status = 'resolved';
+    conflict.resolvedAt = new Date().toISOString();
+    conflict.resolution = 'matched_content';
+    conflict.evidence = { method: evidence.method || 'sha1', digest: evidence.digest || null };
+    activeConflicts.set(conflictId, conflict);
+    if (syncDb) syncDb.resolveConflict(conflict.remotePath, 'matched_content', conflictId, 'synced');
+    return { conflict: { ...conflict }, nextAction: { action: 'none' }, strategy: 'matched_content' };
+  }
+
   function resolve(conflictId, strategy) {
     return commitResolution(conflictId, strategy);
   }
@@ -340,6 +352,7 @@ function createConflictStore(syncDb) {
     recordTransferSkipped,
     prepareResolution,
     commitResolution,
+    confirmEquivalent,
     resolve,
     listActive,
     listAll,

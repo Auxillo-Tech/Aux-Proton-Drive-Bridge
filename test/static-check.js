@@ -23,13 +23,13 @@ for (const api of ['getDefaultLocalFolder', 'getStatus', 'listMyFiles', 'downloa
   if (!preload.includes(api)) throw new Error(`Preload API missing ${api}`);
 }
 // Check new modules exist
-const newModules = ['syncDb.js', 'transferQueue.js', 'progressParser.js', 'progressPersistence.js', 'conflictStore.js', 'syncEngine.js', 'autoUpdater.js', 'fuseMount.js', 'pathSafety.js', 'protonProcessLock.js', 'childProcessEnv.js'];
+const newModules = ['syncDb.js', 'transferQueue.js', 'progressParser.js', 'progressPersistence.js', 'conflictStore.js', 'syncEngine.js', 'autoUpdater.js', 'linuxGraphics.js', 'pathSafety.js', 'protonProcessLock.js', 'childProcessEnv.js'];
 for (const mod of newModules) {
   const p = path.join(__dirname, '..', 'src/main', mod);
   if (!fs.existsSync(p)) throw new Error(`Missing new module: src/main/${mod}`);
 }
 // IPC handlers for new features
-for (const api of ['sync:getStats', 'transfer:enqueue', 'conflict:listActive', 'sync:start', 'update:check', 'fuse:mount', 'profile:list', 'profile:save']) {
+for (const api of ['sync:getStats', 'transfer:enqueue', 'conflict:listActive', 'sync:start', 'update:check', 'profile:list', 'profile:save']) {
   if (!main.includes(api)) throw new Error(`IPC handler missing: ${api}`);
 }
 // Check new APIs in preload (use regex to handle nested object notation like `profile: { list: ... }`)
@@ -41,8 +41,7 @@ const apiChecks = {
   'transfer.enqueue': /transfer:\s*\{[^}]*\benqueue\b\s*[:]/,
   'conflict.listActive': /conflict:\s*\{[^}]*\blistActive\b\s*[:]/,
   'syncEngine.start': /syncEngine:\s*\{[^}]*\bstart\b\s*[:]/,
-  'update.check': /update:\s*\{[^}]*\bcheck\b\s*[:]/,
-  'fuse.mount': /fuse:\s*\{[^}]*\bmount\b\s*[:]/
+  'update.check': /update:\s*\{[^}]*\bcheck\b\s*[:]/
 };
 for (const [api, regex] of Object.entries(apiChecks)) {
   if (!regex.test(preload)) throw new Error(`Preload API missing: ${api}`);
@@ -65,6 +64,16 @@ for (const match of rendererJs.matchAll(/\.innerHTML\s*=\s*([^;\n]+)/g)) {
 }
 if (!rendererJs.includes('MAX_LOG_LINES')) throw new Error('Renderer activity log must have a fixed line bound');
 if (/logOutput\.textContent\s*\+=/.test(rendererJs)) throw new Error('Renderer activity log must not rebuild its complete text on every event');
+if (/loginUrl\s*:/.test(main) || /result\?\.loginUrl/.test(rendererJs) ||
+    /authenticated:\s*Boolean\(after\.authenticated\)[\s\S]{0,200}\b(?:stdout|stderr)\s*:/.test(main)) {
+  throw new Error('Proton login payload URLs must not cross into the renderer');
+}
+if (/\bfuse(?::|Mount|Unmount|Status|Available)|FUSE Mount/.test(`${main}\n${preload}\n${rendererHtml}\n${rendererJs}`)) {
+  throw new Error('Unsupported application FUSE controls must not be shipped');
+}
+if (/bidirectional sync is experimental/i.test(rendererHtml)) {
+  throw new Error('The production sync UI must not ship an obsolete experimental warning');
+}
 // Check new docs and config files exist
 const extraFiles = [
   'LICENSE', 'THIRD_PARTY_NOTICES.md', 'packaging/aur/README.md', 'packaging/flatpak/README.md',

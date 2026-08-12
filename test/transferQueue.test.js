@@ -193,6 +193,93 @@ describe('transferQueue — execution safety', () => {
     await queue.destroy();
   });
 
+  it('treats the transfer timeout as an inactivity limit and resets it on progress', async () => {
+    const spawn = () => {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      let closed = false;
+      const timers = [
+        setTimeout(() => child.stdout.emit('data', Buffer.from('Downloading a (25%)\n')), 600),
+        setTimeout(() => child.stdout.emit('data', Buffer.from('Downloading b (50%)\n')), 1200),
+        setTimeout(() => {
+          if (closed) return;
+          closed = true;
+          child.emit('close', 0, null);
+        }, 1700)
+      ];
+      child.kill = () => {
+        if (closed) return;
+        closed = true;
+        for (const timer of timers) clearTimeout(timer);
+        setImmediate(() => child.emit('close', null, 'SIGKILL'));
+      };
+      return child;
+    };
+    const queue = createTransferQueue({
+      concurrency: 1,
+      retryDelayMs: 0,
+      transferTimeoutMs: 1000,
+      spawn
+    });
+    const completed = new Promise((resolve, reject) => {
+      queue.on('complete', resolve);
+      queue.on('error', payload => reject(new Error(payload.error)));
+    });
+    queue.enqueue('download', { paths: ['/my-files/large'], localFolder: '/tmp', retries: 1 });
+    await completed;
+    await queue.destroy();
+  });
+
+  it('kills a chatty child that repeats the same output without progressing', async () => {
+    const spawn = () => {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      let closed = false;
+      const spam = setInterval(() => child.stderr.emit('data', Buffer.from('Retrying chunk 12...\n')), 200);
+      child.kill = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(spam);
+        setImmediate(() => child.emit('close', null, 'SIGKILL'));
+      };
+      return child;
+    };
+    const queue = createTransferQueue({ concurrency: 1, retryDelayMs: 0, transferTimeoutMs: 1000, spawn });
+    const failed = new Promise(resolve => queue.on('error', resolve));
+    queue.enqueue('download', { paths: ['/my-files/stuck'], localFolder: '/tmp', retries: 1 });
+    const payload = await failed;
+    assert.match(payload.error, /made no progress/);
+    await queue.destroy();
+  });
+
+  it('enforces an absolute duration ceiling even when output keeps changing', async () => {
+    const spawn = () => {
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      let closed = false;
+      let tick = 0;
+      const spam = setInterval(() => child.stderr.emit('data', Buffer.from(`Retrying chunk ${tick++} at ${Date.now()}\n`)), 200);
+      child.kill = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(spam);
+        setImmediate(() => child.emit('close', null, 'SIGKILL'));
+      };
+      return child;
+    };
+    const queue = createTransferQueue({
+      concurrency: 1, retryDelayMs: 0, transferTimeoutMs: 1000, maxTransferDurationMs: 1500, spawn
+    });
+    const failed = new Promise(resolve => queue.on('error', resolve));
+    queue.enqueue('download', { paths: ['/my-files/wedged'], localFolder: '/tmp', retries: 1 });
+    const payload = await failed;
+    assert.match(payload.error, /exceeded the maximum duration/);
+    await queue.destroy();
+  });
+
   it('emits skipped instead of complete for a zero-exit skipped transfer', async () => {
     const queue = createTransferQueue({ concurrency: 1, spawn: scriptedSpawn([{ code: 0, stdout: 'Skipped: 1' }]) });
     let completed = false;

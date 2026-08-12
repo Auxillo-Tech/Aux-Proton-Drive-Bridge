@@ -5,23 +5,27 @@ const os = require('node:os');
 const childProcess = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { DEFAULT_LOCAL_FOLDER, clearStatusCache, extractLoginUrl, getStatus, isAlreadyLoggedOutMessage, parseListOutput, runProton, shutdownProtonProcesses } = require('./protonCli');
-const { createOperationStore, sanitizeForStorage } = require('./operationStore');
+const { createOperationStore, sanitizeForStorage, shouldForwardOperationEvent } = require('./operationStore');
 const { createProfileStore } = require('./profileStore');
 const { createSyncDb } = require('./syncDb');
 const { createTransferQueue } = require('./transferQueue');
 const { createConflictStore } = require('./conflictStore');
 const { createSyncEngine, normalizeIgnorePatterns } = require('./syncEngine');
 const { createAutoUpdater } = require('./autoUpdater');
-const { createFuseMount } = require('./fuseMount');
 const { assertSafePathInside, isPathInside } = require('./pathSafety');
 const { refreshUserIcons } = require('./iconRefresh');
 const { buildChildEnv } = require('./childProcessEnv');
 const { createProgressPersistenceGate } = require('./progressPersistence');
+const { detectLinuxGraphicsWorkaround } = require('./linuxGraphics');
 
 if (process.env.AUX_PROTON_DRIVE_USER_DATA_DIR) {
   app.setPath('userData', path.resolve(process.env.AUX_PROTON_DRIVE_USER_DATA_DIR));
 }
 
+const graphicsWorkaround = detectLinuxGraphicsWorkaround();
+if (graphicsWorkaround?.useAngle && !process.argv.some(arg => arg.startsWith('--use-angle='))) {
+  app.commandLine.appendSwitch('use-angle', graphicsWorkaround.useAngle);
+}
 app.disableHardwareAcceleration();
 protocol.registerSchemesAsPrivileged([{
   scheme: 'app',
@@ -42,7 +46,6 @@ let transferQueue;
 let conflictStore;
 let syncEngine;
 let autoUpdater;
-let fuseMount;
 let tray;
 let isQuitting = false;
 let schedulerTimer;
@@ -342,11 +345,6 @@ function getAutoUpdater() {
   return autoUpdater;
 }
 
-function getFuseMount() {
-  if (!fuseMount) fuseMount = createFuseMount({ mountPoint: path.join(os.homedir(), 'ProtonDrive-FUSE') });
-  return fuseMount;
-}
-
 // ── Progress/operation helpers ──────────────────────────────
 
 function sendProgress(payload) {
@@ -358,6 +356,7 @@ async function recordOperation(action, options, runner) {
   const op = store.begin(action, options);
   sendProgress({ operationId: op.id, stream: 'system', text: `${action} queued` });
   const eventSink = (payload) => {
+    if (!shouldForwardOperationEvent(action, payload)) return;
     store.appendEvent(op.id, payload.stream, payload.text);
     sendProgress({ operationId: op.id, ...sanitizeForStorage(payload) });
   };
@@ -367,8 +366,21 @@ async function recordOperation(action, options, runner) {
     sendProgress({ operationId: op.id, stream: 'system', text: `${action} succeeded` });
     return { ...sanitizeForStorage(result), operationId: op.id };
   } catch (err) {
-    store.finish(op.id, 'failed', { code: err?.result?.code, stdout: err?.result?.stdout, stderr: err?.result?.stderr, error: err?.message || String(err) });
-    sendProgress({ operationId: op.id, stream: 'stderr', text: err?.message || String(err) });
+    // Failure payloads obey the same forwarding rules as live events: remote listing
+    // stdout and login URLs must not reach persistent history or the renderer.
+    const failureStdout = shouldForwardOperationEvent(action, { stream: 'stdout', text: err?.result?.stdout })
+      ? err?.result?.stdout : undefined;
+    const failureStderr = shouldForwardOperationEvent(action, { stream: 'stderr', text: err?.result?.stderr })
+      ? err?.result?.stderr : undefined;
+    let errorText = err?.message || String(err);
+    if (action === 'list' && err?.result?.stdout && errorText === String(err.result.stdout).trim()) {
+      errorText = `proton-drive list failed${err?.result?.code != null ? ` (exit ${err.result.code})` : ''}`;
+    }
+    if (!shouldForwardOperationEvent(action, { stream: 'stderr', text: errorText })) {
+      errorText = `${action} failed`;
+    }
+    store.finish(op.id, 'failed', { code: err?.result?.code, stdout: failureStdout, stderr: failureStderr, error: errorText });
+    sendProgress({ operationId: op.id, stream: 'stderr', text: errorText });
     throw err;
   }
 }
@@ -522,8 +534,24 @@ trustedHandle('proton:login', async () => {
         openedLoginUrl = url;
         // Electron-spawned CLI often cannot open a browser because xdg-open needs
         // a fuller desktop session. Open the Proton login URL from the app itself.
-        shell.openExternal(url).catch(() => {});
-        sendProgress({ stream: 'system', text: `Login URL opened in browser (copy if needed): ${url}` });
+        shell.openExternal(url).then(() => {
+          sendProgress({ stream: 'system', text: 'Proton sign-in URL opened in the browser' });
+        }).catch(async () => {
+          sendProgress({ stream: 'stderr', text: 'Could not open the Proton sign-in URL automatically' });
+          const urlDialog = {
+            type: 'warning',
+            title: 'Open Proton sign-in',
+            message: 'The browser could not be opened automatically. Open this URL manually:',
+            detail: url,
+            buttons: ['Close']
+          };
+          try {
+            const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+            await (parent ? dialog.showMessageBox(parent, urlDialog) : dialog.showMessageBox(urlDialog));
+          } catch {
+            console.error('Unable to display the Proton sign-in URL dialog');
+          }
+        });
       }
     }
   }));
@@ -532,10 +560,7 @@ trustedHandle('proton:login', async () => {
   return {
     ok: true,
     authenticated: Boolean(after.authenticated),
-    loginUrl: openedLoginUrl,
-    operationId: result.operationId,
-    stdout: result.stdout,
-    stderr: result.stderr
+    operationId: result.operationId
   };
 });
 trustedHandle('proton:logout', async () => {
@@ -693,13 +718,6 @@ trustedHandle('update:download', async () => {
 trustedHandle('update:apply', async (_event, downloadedAsset) => getAutoUpdater().applyUpdate(downloadedAsset));
 trustedHandle('update:getAvailable', async () => getAutoUpdater().getAvailableUpdate());
 
-// ── IPC Handlers: FUSE Mount ────────────────────────────────
-
-trustedHandle('fuse:mount', async () => getFuseMount().mount());
-trustedHandle('fuse:unmount', async () => getFuseMount().unmount());
-trustedHandle('fuse:getStatus', async () => getFuseMount().getStatus());
-trustedHandle('fuse:isAvailable', async () => getFuseMount().isFuseAvailable());
-
 // ── App lifecycle ───────────────────────────────────────────
 
 app.whenReady().then(async () => {
@@ -743,8 +761,6 @@ app.on('before-quit', (event) => {
     if (schedulerTimer) { clearInterval(schedulerTimer); schedulerTimer = null; }
     // Stop sync engine
     if (syncEngine) { try { await syncEngine.stop(); } catch {} }
-    // Unmount FUSE
-    if (fuseMount) { try { await fuseMount.unmount(); } catch {} }
     // Cancel all transfers
     if (transferQueue) await transferQueue.destroy();
     shutdownProtonProcesses();

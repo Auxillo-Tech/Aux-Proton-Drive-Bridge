@@ -9,7 +9,7 @@ const root = path.join(__dirname, '..');
 const port = 9340;
 const syncFolder = fs.mkdtempSync(path.join(os.homedir(), '.aux-proton-e2e-'));
 const secondFolder = fs.mkdtempSync(path.join(os.homedir(), '.aux-proton-e2e-second-'));
-const commandUploadFile = path.join(secondFolder, 'command-upload.txt');
+const commandUploadFile = path.join(secondFolder, `edi-e2e-temp-command-upload-${process.pid}.txt`);
 fs.writeFileSync(commandUploadFile, 'queued by second-instance E2E');
 const unapprovedFile = path.join(os.homedir(), `.aux-proton-e2e-unapproved-${process.pid}`);
 fs.writeFileSync(unapprovedFile, 'must not be readable through renderer IPC');
@@ -171,22 +171,20 @@ function connectCdp(url) {
     })()`);
 
     if (boot.title !== 'Aux Proton Drive Bridge') throw new Error(`Unexpected title: ${boot.title}`);
-    if (!boot.version || boot.tabCount !== 6 || !boot.csp.includes("script-src 'self'")) throw new Error(`Invalid renderer shell: ${JSON.stringify(boot)}`);
+    if (!boot.version || boot.tabCount !== 5 || !boot.csp.includes("script-src 'self'")) throw new Error(`Invalid renderer shell: ${JSON.stringify(boot)}`);
     if (!boot.installed || !boot.authenticated) throw new Error(`Live Proton CLI is not ready: ${JSON.stringify(boot)}`);
     if (boot.engineActive) throw new Error('Sync engine auto-started without user consent');
 
     const tabState = await cdp.evaluate(`(async () => {
       const result = {};
-      for (const name of ['files','sync','conflicts','queue','fuse','updates']) {
+      for (const name of ['files','sync','conflicts','queue','updates']) {
         document.querySelector('#tab' + name[0].toUpperCase() + name.slice(1)).click();
         await new Promise(r => setTimeout(r, 150));
         result[name] = document.querySelector('#panel' + name[0].toUpperCase() + name.slice(1)).classList.contains('active');
       }
-      const fuse = await window.auxProtonDriveBridge.fuse.getStatus();
-      return { result, fuseAvailable: fuse.isFuseAvailable, fuseReason: fuse.capabilityReason || null };
+      return { result };
     })()`);
     if (Object.values(tabState.result).some(value => value !== true)) throw new Error(`Tab navigation failed: ${JSON.stringify(tabState)}`);
-    if (tabState.fuseAvailable) throw new Error('FUSE reported available even though the installed CLI has no mount command');
 
     const capability = await cdp.evaluate(`(async () => {
       const api = window.auxProtonDriveBridge;
@@ -289,7 +287,6 @@ function connectCdp(url) {
       pathCapabilityEnforced: capability.rejected,
       rendererProtocolRestricted: capability.blockedAsset,
       secondInstanceCommands: true,
-      fuseCapabilityGate: tabState.fuseReason,
       syncLifecycle: lifecycle,
       selectiveSync: true
     }));

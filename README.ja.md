@@ -10,7 +10,7 @@ Proton の公式 `proton-drive` CLI を使用した非公式の Linux デスク�
 
 ## ステータス
 
-バージョン **`0.3.3`** - 完全な同期、転送キュー、競合解決、FUSE マウントサポート。
+バージョン **`0.3.6`** - 信頼性の高い同期、転送キュー、競合からの復旧、署名付き更新。
 
 Aux Proton Drive Bridge は、Proton の公式 CLI を介して Proton Drive 操作用の GUI を Linux ユーザーに提供します。
 
@@ -25,29 +25,29 @@ Aux Proton Drive Bridge は、Proton の公式 CLI を介して Proton Drive 操
 - **自動アップデーター** - GitHub Releases ベースの更新確認とダウンロード
 - **リリース署名** - GPG および signify/minisign 署名スクリプト
 - **ファイルマネージャー統合** - Nautilus、Dolphin、Thunar のコンテキストメニュースクリプト
-- **オプションの FUSE マウント** - Proton Drive をファイルシステムディレクトリとしてマウント
-- **タブ付き UI** - ファイル、同期ダッシュボード、競合、キュー、FUSE、更新の各タブ
+- **自動復旧** - 大規模な転送を継続し、内容が同一の古い競合を安全に照合
+- **タブ付き UI** - ファイル、同期ダッシュボード、競合、キュー、更新の各タブ
 
 ## クイックインストール
 
 ### AppImage
 ダウンロードして実行：
 ```
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
 ```
 実行可能にしてファイルマネージャーまたはターミナルから起動。
 
 ### Debian / Ubuntu / Mint / Pop!_OS
 ダウンロード：
 ```
-Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
 ```
 グラフィカルパッケージインストーラーまたは `apt`/`dpkg` でインストール。
 
 ### Fedora / RHEL / openSUSE
 ダウンロード：
 ```
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
 ```
 グラフィカルパッケージインストーラー、`dnf`、`zypper`、または `rpm` でインストール。
 
@@ -58,7 +58,7 @@ Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
 - Proton アカウント
 - Proton ログイン用のブラウザアクセス
 - Proton CLI がサポートする Linux シークレットストア（KWallet、GNOME Keyring/libsecret、`pass`）
-- FUSE：オプション、FUSE マウント機能にのみ必要
+
 
 ## セキュリティモデル
 

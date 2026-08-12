@@ -40,6 +40,10 @@ function createTransferQueue(options = {}) {
   const transferTimeoutMs = Number.isFinite(options.transferTimeoutMs)
     ? Math.max(1000, options.transferTimeoutMs)
     : DEFAULT_TRANSFER_TIMEOUT_MS;
+  // Hard ceiling: even a child that keeps printing must eventually release the queue slot.
+  const maxTransferDurationMs = Number.isFinite(options.maxTransferDurationMs)
+    ? Math.max(transferTimeoutMs, options.maxTransferDurationMs)
+    : transferTimeoutMs * 12;
 
   const emitter = new EventEmitter();
   const pending = [];        // { id, action, options, priority, retries, createdAt }
@@ -176,16 +180,30 @@ function createTransferQueue(options = {}) {
       const allLines = [];
       const lineBuffers = { stdout: '', stderr: '' };
       let settled = false;
-      const timeout = setTimeout(() => {
+      let timeout = null;
+      let lastActivitySignature = null;
+
+      function resetInactivityTimeout() {
+        if (settled) return;
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          cleanupChild();
+          settle(new Error(`Proton Drive ${item.action} made no progress for ${transferTimeoutMs} ms`));
+        }, transferTimeoutMs);
+        timeout.unref?.();
+      }
+
+      const absoluteTimeout = setTimeout(() => {
         cleanupChild();
-        settle(new Error(`Proton Drive ${item.action} timed out after ${transferTimeoutMs} ms`));
-      }, transferTimeoutMs);
-      timeout.unref?.();
+        settle(new Error(`Proton Drive ${item.action} exceeded the maximum duration of ${maxTransferDurationMs} ms`));
+      }, maxTransferDurationMs);
+      absoluteTimeout.unref?.();
 
       function settle(err, result) {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        if (timeout) clearTimeout(timeout);
+        clearTimeout(absoluteTimeout);
         if (err) reject(err);
         else resolve(result);
       }
@@ -193,6 +211,8 @@ function createTransferQueue(options = {}) {
       function cleanupChild() {
         try { if (!child.killed) child.kill('SIGKILL'); } catch {}
       }
+
+      resetInactivityTimeout();
 
       function appendOutput(stream, text) {
         const textBytes = Buffer.byteLength(text);
@@ -217,6 +237,15 @@ function createTransferQueue(options = {}) {
           if (!line) continue;
           allLines.push(line);
           const parsed = parseProgressLine(line);
+          // Only distinct output counts as activity: a loop reprinting the same error
+          // or the same stalled percentage must not keep the inactivity timer alive.
+          const signature = parsed
+            ? `progress:${parsed.type || ''}:${parsed.name || ''}:${parsed.pct ?? ''}:${parsed.bytes ?? ''}`
+            : `line:${line}`;
+          if (signature !== lastActivitySignature) {
+            lastActivitySignature = signature;
+            resetInactivityTimeout();
+          }
           emit('progress', { id: item.id, action: item.action, stream, text: line, ...(parsed || {}), ts: new Date().toISOString() });
         }
       }

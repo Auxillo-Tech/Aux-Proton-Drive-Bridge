@@ -25,16 +25,28 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const emitter = new EventEmitter();
     queue = {
       items: [],
+      outstanding: new Set(),
       enqueue(action, options, priority) {
         const id = `tx-${this.items.length + 1}`;
         this.items.push({ id, action, options, priority });
+        this.outstanding.add(id);
         return id;
+      },
+      getState() {
+        return {
+          active: [],
+          pending: [...this.outstanding].map(id => ({ id })),
+          recentCompleted: []
+        };
       },
       on(event, handler) {
         emitter.on(event, handler);
         return () => emitter.off(event, handler);
       },
-      emit(event, payload) { emitter.emit(event, payload); }
+      emit(event, payload) {
+        if (['complete', 'error', 'cancelled', 'skipped'].includes(event)) this.outstanding.delete(payload.id);
+        emitter.emit(event, payload);
+      }
     };
     store = createConflictStore(db);
     remoteOutput = '[]';
@@ -69,6 +81,42 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const result = await engine.syncPending();
     assert.strictEqual(result.queued, 2);
     assert.deepEqual(queue.items.map(item => item.action).sort(), ['download', 'upload']);
+  });
+
+  it('starts the next sync batch immediately after a successful queue drain', async () => {
+    const itemCount = 51;
+    remoteOutput = JSON.stringify(Array.from({ length: itemCount }, (_, index) => ({
+      name: { ok: true, value: `batch-${index}.txt` },
+      type: 'file',
+      activeRevision: { value: {
+        claimedSize: 1,
+        claimedModificationTime: '2026-08-12T12:00:00Z'
+      } }
+    })));
+    engine.start(SYNC_MODES.ONE_WAY_DOWNLOAD, dir, 60_000);
+    const firstBatchDeadline = Date.now() + 5_000;
+    while (Date.now() < firstBatchDeadline && queue.items.length < 50) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.strictEqual(queue.items.length, 50);
+
+    for (const transfer of queue.items.slice(0, 50)) {
+      const remotePath = transfer.options.paths[0];
+      const localPath = path.join(dir, path.basename(remotePath));
+      fs.writeFileSync(localPath, 'x');
+      queue.emit('complete', {
+        id: transfer.id,
+        action: transfer.action,
+        options: transfer.options,
+        result: { summary: { totalSkipped: 0 } }
+      });
+    }
+
+    const nextBatchDeadline = Date.now() + 5_000;
+    while (Date.now() < nextBatchDeadline && queue.items.length < itemCount) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.strictEqual(queue.items.length, itemCount, 'the final pending item waited for the periodic poll');
   });
 
   it('reports the scheduler as active between sync cycles and uses the selected folder', async () => {
@@ -249,6 +297,28 @@ describe('syncEngine - end-to-end state orchestration', () => {
     await new Promise(resolve => setTimeout(resolve, 750));
     await new Promise(resolve => setTimeout(resolve, 100));
     assert.strictEqual(queue.items.length, 0, 'a later watcher event bypassed authoritative reconciliation');
+  });
+
+  it('retries a transient Proton auth response during a recursive remote listing', async () => {
+    engine.destroy();
+    let attempts = 0;
+    engine = createSyncEngine({
+      syncDb: db,
+      transferQueue: queue,
+      conflictStore: store,
+      localFolder: dir,
+      getStatus: async () => ({ installed: true, authenticated: true, busy: false }),
+      runProton: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('You need to login first');
+        return { code: 0, stdout: '[]', stderr: '' };
+      },
+      remoteListRetryDelayMs: 1
+    });
+
+    const result = await engine.pollRemote();
+    assert.strictEqual(result.authoritative, true);
+    assert.strictEqual(attempts, 2);
   });
 
   it('does not flush deferred watcher uploads after a failed remote listing', async () => {
@@ -2168,6 +2238,101 @@ describe('syncEngine - end-to-end state orchestration', () => {
     assert.strictEqual(db.getTrackedFileByPath('/my-files/pair-folder/same.txt')?.sync_state, 'synced');
     assert.strictEqual(db.getTrackedFileByPath('/my-files/diff.txt')?.sync_state, 'conflict');
     assert.strictEqual(store.listActive().length, 1);
+  });
+
+  it('does not pair same-size local_new content when the remote verified digest differs', async () => {
+    const localPath = path.join(dir, 'same-size-different.txt');
+    fs.writeFileSync(localPath, 'local!');
+    db.upsertTrackedFile({
+      remotePath: '/my-files/same-size-different.txt', localPath, type: 'file',
+      localSize: 6, localModified: fs.statSync(localPath).mtime.toISOString(), syncState: 'local_new'
+    });
+    const otherDigest = crypto.createHash('sha1').update('remote').digest('hex');
+    remoteOutput = JSON.stringify([{
+      name: { ok: true, value: 'same-size-different.txt' }, type: 'file',
+      activeRevision: { value: {
+        claimedSize: 6,
+        claimedModificationTime: '2026-08-12T12:00:00Z',
+        claimedDigests: { sha1: otherDigest, sha1Verified: true }
+      } }
+    }]);
+
+    await engine.pollRemote();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/same-size-different.txt')?.sync_state, 'conflict');
+    assert.strictEqual(store.listActive().length, 1);
+  });
+
+  it('leaves a conflict open when the matching remote digest is unverified', async () => {
+    const localPath = path.join(dir, 'unverified-equivalent.txt');
+    fs.writeFileSync(localPath, 'same-content');
+    const stat = fs.statSync(localPath);
+    db.upsertTrackedFile({
+      remotePath: '/my-files/unverified-equivalent.txt', localPath, type: 'file',
+      localSize: stat.size, remoteSize: stat.size,
+      localModified: stat.mtime.toISOString(), remoteModified: '2026-08-05T12:00:00Z',
+      syncState: 'synced'
+    });
+    store.record({
+      id: 'unverified-equivalent-conflict',
+      type: 'local_remote_modify',
+      reason: 'Both local and remote modified since last sync',
+      remotePath: '/my-files/unverified-equivalent.txt',
+      localPath,
+      remoteModified: '2026-08-05T12:00:00Z',
+      localModified: stat.mtime.toISOString(),
+      remoteSize: stat.size,
+      localSize: stat.size,
+      detectedAt: '2026-08-06T12:00:00Z'
+    });
+    const digest = crypto.createHash('sha1').update('same-content').digest('hex');
+    remoteOutput = JSON.stringify([{
+      name: { ok: true, value: 'unverified-equivalent.txt' }, type: 'file',
+      activeRevision: { value: {
+        claimedSize: stat.size,
+        claimedModificationTime: '2026-08-05T12:00:00Z',
+        claimedDigests: { sha1: digest, sha1Verified: false }
+      } }
+    }]);
+
+    await engine.pollRemote();
+    assert.strictEqual(store.listActive().length, 1, 'unverified digest must not auto-resolve a conflict');
+  });
+
+  it('closes a legacy false conflict when local bytes match the remote verified digest', async () => {
+    const localPath = path.join(dir, 'legacy-equivalent.txt');
+    fs.writeFileSync(localPath, 'same-content');
+    const stat = fs.statSync(localPath);
+    db.upsertTrackedFile({
+      remotePath: '/my-files/legacy-equivalent.txt', localPath, type: 'file',
+      localSize: stat.size, remoteSize: stat.size,
+      localModified: stat.mtime.toISOString(), remoteModified: '2026-08-05T12:00:00Z',
+      syncState: 'synced'
+    });
+    store.record({
+      id: 'legacy-equivalent-conflict',
+      type: 'local_remote_modify',
+      reason: 'Both local and remote modified since last sync',
+      remotePath: '/my-files/legacy-equivalent.txt',
+      localPath,
+      remoteModified: '2026-08-05T12:00:00Z',
+      localModified: stat.mtime.toISOString(),
+      remoteSize: stat.size,
+      localSize: stat.size,
+      detectedAt: '2026-08-06T12:00:00Z'
+    });
+    const digest = crypto.createHash('sha1').update('same-content').digest('hex');
+    remoteOutput = JSON.stringify([{
+      name: { ok: true, value: 'legacy-equivalent.txt' }, type: 'file',
+      activeRevision: { value: {
+        claimedSize: stat.size,
+        claimedModificationTime: '2026-08-05T12:00:00Z',
+        claimedDigests: { sha1: digest, sha1Verified: true }
+      } }
+    }]);
+
+    await engine.pollRemote();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/legacy-equivalent.txt')?.sync_state, 'synced');
+    assert.strictEqual(store.listActive().length, 0);
   });
 
 

@@ -2,9 +2,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const MAX_EVENT_TEXT = 4000;
-const MAX_EVENTS_PER_OPERATION = 200;
-const MAX_OPERATIONS = 500;
+const MAX_EVENT_TEXT = 1000;
+const MAX_EVENTS_PER_OPERATION = 50;
+const MAX_OPERATIONS = 200;
 
 function redactSensitive(value) {
   return String(value ?? '')
@@ -38,6 +38,14 @@ function sanitizeForStorage(value) {
     return out;
   }
   return String(value);
+}
+
+function shouldForwardOperationEvent(action, payload = {}) {
+  // Remote JSON listings and browser-login URLs can contain private metadata. Both are
+  // consumed in the main process and must not be copied into DOM logs or persistent history.
+  if (action === 'list' && payload.stream === 'stdout') return false;
+  if (action === 'login' && /https?:\/\/\S+/i.test(String(payload.text || ''))) return false;
+  return true;
 }
 
 function createOperationStore(filePath) {
@@ -150,4 +158,4 @@ function createOperationStore(filePath) {
   return { filePath: resolved, begin, appendEvent, finish, list, clear, recoverStaleRunning, redactSensitive, sanitizeForStorage };
 }
 
-module.exports = { createOperationStore, redactSensitive, sanitizeForStorage };
+module.exports = { createOperationStore, redactSensitive, sanitizeForStorage, shouldForwardOperationEvent };

@@ -10,7 +10,7 @@ Inoffizielle Linux-Desktop-Brücke für Proton Drive, die das offizielle `proton
 
 ## Status
 
-Version **`0.3.3`** - Voll ausgestattete Synchronisation, Übertragungswarteschlange, Konfliktlösung und FUSE-Mount-Unterstützung.
+Version **`0.3.6`** - Zuverlässige Synchronisation, Übertragungswarteschlange, Konfliktbehebung und signierte Updates.
 
 Aux Proton Drive Bridge bietet Linux-Anwendern eine grafische Oberfläche für Proton-Drive-Operationen über das offizielle Proton-CLI.
 
@@ -25,29 +25,29 @@ Aux Proton Drive Bridge bietet Linux-Anwendern eine grafische Oberfläche für P
 - **Auto-Update** - GitHub-Releases-basierte Update-Prüfung und -Download
 - **Release-Signierung** - GPG- und signify/minisign-Signierungsskripte
 - **Dateimanager-Integration** - Kontextmenü-Skripte für Nautilus, Dolphin, Thunar
-- **Optionaler FUSE-Mount** - Proton Drive als Dateisystemverzeichnis einbinden
-- **Registerkarten-Oberfläche** - Separate Tabs für Dateien, Sync-Dashboard, Konflikte, Warteschlange, FUSE und Updates
+- **Automatische Wiederherstellung** - Große Übertragungen fortsetzen und identische ältere Konflikte sicher abgleichen
+- **Registerkarten-Oberfläche** - Separate Tabs für Dateien, Sync-Dashboard, Konflikte, Warteschlange und Updates
 
 ## Schnellinstallation
 
 ### AppImage
 Herunterladen und ausführen:
 ```
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
 ```
 Ausführbar machen und aus dem Dateimanager oder Terminal starten.
 
 ### Debian / Ubuntu / Mint / Pop!_OS
 Herunterladen:
 ```
-Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
 ```
 Installation mit dem grafischen Paketmanager oder `apt`/`dpkg`.
 
 ### Fedora / RHEL / openSUSE
 Herunterladen:
 ```
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
 ```
 Installation mit dem grafischen Paketmanager, `dnf`, `zypper` oder `rpm`.
 
@@ -58,7 +58,7 @@ Installation mit dem grafischen Paketmanager, `dnf`, `zypper` oder `rpm`.
 - Ein Proton-Konto
 - Browserzugang für die Proton-Anmeldung
 - Linux-Secrets-Speicher, der von Proton CLI unterstützt wird (KWallet, GNOME Keyring/libsecret oder `pass`)
-- FUSE: optional, nur für die FUSE-Mount-Funktion erforderlich
+
 
 ## Sicherheitsmodell
 

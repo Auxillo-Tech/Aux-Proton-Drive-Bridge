@@ -391,7 +391,7 @@ select { cursor: pointer; }
   line-height: 1.55;
 }
 .note strong { color: var(--text); }
-.note code, .fuse-detail code, .conflict-legend code {
+.note code, .conflict-legend code {
   padding: 1px 6px;
   border-radius: 5px;
   background: rgba(24, 32, 51, .8);
@@ -639,20 +639,6 @@ textarea::placeholder { color: var(--faint); }
 .queue-row:hover { background: rgba(255, 255, 255, .03); }
 .queue-row button { height: 27px; padding: 0 10px; font-size: 10.5px; }
 
-/* ── FUSE ──────────────────────────────────────────────────────────────── */
-
-.fuse-status-card {
-  margin-bottom: 14px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(9, 15, 26, .55);
-}
-.fuse-status-indicator { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.fuse-status-indicator strong { font-size: 13px; font-weight: 640; }
-.fuse-detail { color: var(--muted); line-height: 1.7; font-size: 12px; }
-.fuse-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.fuse-controls .wide { margin-top: 0; }
 .error-text { color: #ffb1bd; }
 
 /* ── Updates ───────────────────────────────────────────────────────────── */
@@ -744,7 +730,7 @@ textarea::placeholder { color: var(--faint); }
 @media (max-width: 860px) {
   .grid { grid-template-columns: 1fr; }
   .history-row { grid-template-columns: minmax(0, 1fr); }
-  .fuse-controls { grid-template-columns: 1fr; }
+
   .sync-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .brand-logo { display: none; }
   .diff-container { grid-template-columns: 1fr; }

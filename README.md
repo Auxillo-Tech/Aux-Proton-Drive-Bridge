@@ -14,9 +14,9 @@ Unofficial Linux desktop bridge for Proton Drive using Proton's official `proton
 
 ## Status
 
-Version **`0.3.3`** - Full-featured sync, transfer queue, conflict resolution, and FUSE mount support.
+Version **`0.3.6`** - Reliable sync, transfer queue, conflict recovery, and signed updates.
 
-Aux Proton Drive Bridge gives Linux users a GUI for Proton Drive operations through Proton's official CLI. It includes persistent sync metadata, bidirectional sync, a live transfer queue, conflict management, signed updates, and capability-gated mount status.
+Aux Proton Drive Bridge gives Linux users a GUI for Proton Drive operations through Proton's official CLI. It includes persistent sync metadata, bidirectional sync, a live transfer queue, conflict management, and signed updates.
 
 ## Download
 
@@ -47,8 +47,8 @@ Release assets include:
 - **Auto-updater** - GitHub Releases-based update checking and download
 - **Release signing** - GPG and signify/minisign signing scripts
 - **File manager integration** - Nautilus, Dolphin, Thunar context menu scripts
-- **Optional FUSE mount** - Mount Proton Drive as a filesystem directory
-- **Tabbed UI** - Separate tabs for Files, Sync Dashboard, Conflicts, Queue, FUSE, and Updates
+- **Automatic recovery** - Resume large transfer sets, reconcile byte-identical legacy conflicts, and continue batches without waiting for the next poll
+- **Tabbed UI** - Separate tabs for Files, Sync Dashboard, Conflicts, Queue, and Updates
 
 ### v0.2.x - Existing features
 
@@ -82,7 +82,7 @@ Existing local files should not be overwritten by default.
 - A Proton account
 - Browser access for Proton login
 - Linux secret store supported by Proton CLI, such as KWallet, GNOME Keyring/libsecret, or `pass`
-- FUSE is unavailable with Proton Drive CLI 0.6.0 because that CLI has no mount command
+
 
 The installed CLI owns authentication. The bridge supports one active Proton account/session at a time; saved backup settings do not create separate authentication contexts.
 
@@ -93,7 +93,7 @@ The installed CLI owns authentication. The bridge supports one active Proton acc
 Download and run:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
 ```
 
 Make it executable and run it from your file manager or terminal.
@@ -103,7 +103,7 @@ Make it executable and run it from your file manager or terminal.
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
 ```
 
 Install with your graphical package installer or with `apt`/`dpkg`.
@@ -113,7 +113,7 @@ Install with your graphical package installer or with `apt`/`dpkg`.
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
 ```
 
 Install with your graphical package installer, `dnf`, `zypper`, or `rpm`.
@@ -132,7 +132,7 @@ See full instructions: [`docs/INSTALL.md`](docs/INSTALL.md).
 8. Click **Download selected**, **Download everything**, or **Upload files/folders**.
 9. Check the **Sync** tab to start background sync.
 10. View **Conflicts** tab to resolve any detected conflicts.
-11. Check the **FUSE Mount** tab for capability status. Proton Drive CLI 0.6.0 reports mounting as unavailable.
+
 
 Sync never propagates deletion. It restores or preserves the surviving copy according to the selected direction instead of deleting cloud or local data. Skipped transfers remain unresolved and are shown as conflicts.
 
@@ -190,7 +190,7 @@ Implemented foundations:
 - Auto-update via GitHub Releases
 - Signing/attestation scripts
 - File manager integration
-- Explicit unsupported FUSE status for CLI 0.6.0, with no speculative mount process
+- Automatic AMD Navi 48 software-rendering fallback on affected Linux systems
 - Desktop notifications
 - Conflict review UI with metadata diff viewer
 

@@ -67,6 +67,22 @@ test('parseListOutput preserves structured JSON metadata', () => {
   });
 });
 
+test('parseListOutput excludes unverified claimed SHA-1 digests entirely', () => {
+  const rows = parseListOutput(JSON.stringify([{
+    type: 'file',
+    name: { ok: true, value: 'legacy.txt' },
+    activeRevision: { value: {
+      claimedSize: 6,
+      claimedModificationTime: '2026-08-12T10:00:00.000Z',
+      claimedDigests: { sha1: '0123456789ABCDEF0123456789ABCDEF01234567', sha1Verified: false }
+    } },
+    uid: 'legacy-uid'
+  }]));
+
+  assert.equal(rows[0].hash, undefined);
+  assert.equal(rows[0].claimedHash, undefined);
+});
+
 test('parseListOutputAsync moves large JSON listings off the event loop', async () => {
   const output = JSON.stringify(Array.from({ length: 10_000 }, (_, index) => ({
     type: 'file',

@@ -1,29 +1,27 @@
 # Release status
 
-Status: **v0.3.3 local release candidate** - Full-featured sync, transfer queue, conflict resolution, FUSE mount, and auto-update.
+Status: **v0.3.6 local release candidate** - Reliable sync, transfer queue, conflict recovery, signed updates, and Linux package targets.
 
-Version: 0.3.3
-Publication: not yet published; the current public release remains v0.3.2
-Planned release page: <https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/tag/v0.3.3>
+Version: 0.3.6
+Publication: not yet published; the current public release remains v0.3.5
+Planned release page: <https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/tag/v0.3.6>
 
 ## Release gates
 
-A v0.3.3 release is valid only when all of these commands pass from one clean Git revision:
+A v0.3.6 release is valid only when all of these commands pass from one clean Git revision:
 
-- Source tests/static checks: `npm run check` - passed
-- Dependency audit: `npm audit --json` - 0 vulnerabilities (verified)
-- Source test result: 199 passed, 1 intentionally skipped
-- Real 44,275-item tree: 8.43 s migration/full scan with 79.59 ms maximum event-loop delay;
-  4.99 s steady scan with 97.58 ms maximum event-loop delay
+- Source tests/static checks: pending final v0.3.6 verification
+- Dependency audit: `npm audit --json` - 0 vulnerabilities
+- Source and installed-package results are recorded only after the final matrix completes
 
 ## Release assets
 
-- `Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage`
-- `Aux.Proton.Drive.Bridge-0.3.3-amd64.deb`
-- `Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm`
-- `aux-proton-drive-bridge-0.3.3-source.tar.gz`
-- `aux-proton-drive-bridge-0.3.3-source.zip`
-- `aux-proton-drive-bridge-0.3.3-aur.tar.gz`
+- `Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage`
+- `Aux.Proton.Drive.Bridge-0.3.6-amd64.deb`
+- `Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm`
+- `aux-proton-drive-bridge-0.3.6-source.tar.gz`
+- `aux-proton-drive-bridge-0.3.6-source.zip`
+- `aux-proton-drive-bridge-0.3.6-aur.tar.gz`
 - `latest-linux.yml`
 - `sbom.cdx.json`
 - `release-manifest.json`
@@ -44,8 +42,8 @@ The checksum manifest must have a valid Ed25519 signature from the public key in
 | Conflict persistence and deferred resolution | Implemented |
 | Signed GitHub release updater | Implemented |
 | File manager integration | Implemented |
-| Explicit unsupported mount status | Implemented |
-| Native FUSE mount with Proton Drive CLI 0.6.0 | Unavailable because the CLI has no mount command |
+| Automatic recovery for large transfer batches and legacy false conflicts | Implemented |
+| AMD Navi 48 startup compatibility | Automatic software-rendering fallback |
 | AppImage, DEB, and RPM | Supported release targets |
 | AUR metadata | Generated and container-validated per release; AUR publication is separate |
 | Flatpak | Not shipped |
@@ -54,6 +52,6 @@ The checksum manifest must have a valid Ed25519 signature from the public key in
 
 - Linux x64 only.
 - Sync never propagates deletion. It preserves or restores the surviving copy.
-- Proton Drive CLI 0.6.0 supports one active authenticated account and exposes no mount command.
+- Proton Drive CLI 0.6.0 supports one active authenticated account.
 - Flatpak remains blocked until there is an authoritative immutable Proton Drive CLI source and an offline sandbox build path.
 - GitHub Releases are the public distribution channel. AUR publication remains a separate maintainer action after local release validation.

@@ -64,7 +64,6 @@ function switchTab(tabName) {
   if (tabName === 'sync') refreshSyncDashboard();
   if (tabName === 'conflicts') refreshConflicts();
   if (tabName === 'queue') refreshQueue();
-  if (tabName === 'fuse') refreshFuse();
   if (tabName === 'updates' && !updateCheckedThisSession) refreshUpdates();
   startAutoRefresh();
 }
@@ -232,7 +231,6 @@ async function run(label, fn) {
     const result = await fn();
     if (result?.stdout) log(result.stdout.trim());
     if (result?.stderr) log(result.stderr.trim(), 'warn');
-    if (result?.loginUrl) log(`If the browser did not open, use: ${result.loginUrl}`, 'warn');
     if (result?.message) log(result.message, 'success');
     if (result?.queued) log(`${label} queued as ${result.transferId}.`, 'success');
     else if (!result?.alreadyAuthenticated && !result?.alreadyLoggedOut) log(`${label} finished.`);
@@ -547,68 +545,6 @@ $('queueCancelAllBtn').addEventListener('click', async () => {
   } catch (err) { log(`Cancel all error: ${err.message}`, 'error'); }
 });
 
-// ── FUSE Mount ──────────────────────────────────────────────
-
-async function refreshFuse() {
-  try {
-    const status = await api.fuse.getStatus();
-    if (!status) return;
-
-    const dot = $('fuseStateDot');
-    dot.className = 'dot';
-    if (status.isMounted) { dot.classList.add('ok');
-      $('fuseStateText').textContent = `Mounted at ${status.mountPoint}`; }
-    else if (status.state === 'error') { dot.classList.add('bad');
-      $('fuseStateText').textContent = 'Error'; }
-    else if (status.state === 'mounting') { dot.classList.add('warn');
-      $('fuseStateText').textContent = 'Mounting…'; }
-    else { dot.classList.add('bad');
-      $('fuseStateText').textContent = 'Not mounted'; }
-
-    $('fuseMountPoint').textContent = status.mountPoint || '~/ProtonDrive-FUSE';
-
-    const errorEl = $('fuseError');
-    if (status.error) {
-      errorEl.textContent = `Error: ${status.error}`;
-      errorEl.classList.remove('hidden');
-    } else {
-      errorEl.classList.add('hidden');
-    }
-
-    $('fuseMountBtn').disabled = !status.canMount;
-    $('fuseUnmountBtn').disabled = !status.canUnmount;
-
-    if (!status.isFuseAvailable) {
-      const reason = status.capabilityReason || 'FUSE is unavailable on this system.';
-      errorEl.textContent = reason;
-      errorEl.classList.remove('hidden');
-    }
-  } catch (err) {
-    log(`FUSE refresh error: ${err.message}`, 'error');
-  }
-}
-
-$('fuseMountBtn').addEventListener('click', async () => {
-  try {
-    log('Mounting Proton Drive via FUSE…');
-    const result = await api.fuse.mount();
-    if (result.ok) log('FUSE mount successful');
-    else log(`FUSE mount failed: ${result.error}`, 'error');
-    refreshFuse();
-  } catch (err) { log(`FUSE mount error: ${err.message}`, 'error'); }
-});
-
-$('fuseUnmountBtn').addEventListener('click', async () => {
-  try {
-    log('Unmounting…');
-    await api.fuse.unmount();
-    log('FUSE unmounted');
-    refreshFuse();
-  } catch (err) { log(`FUSE unmount error: ${err.message}`, 'error'); }
-});
-
-$('fuseRefreshBtn').addEventListener('click', refreshFuse);
-
 // ── Updates ─────────────────────────────────────────────────
 
 let lastUpdateCheck = null;
@@ -783,7 +719,6 @@ async function refreshCurrentTab() {
       case 'sync': refreshSyncDashboard(); break;
       case 'conflicts': refreshConflicts(); break;
       case 'queue': refreshQueue(); break;
-      case 'fuse': refreshFuse(); break;
     }
   } catch { /* silent — background refresh shouldn't spam */ }
 }
@@ -1103,9 +1038,8 @@ async function boot() {
   const status = await refreshStatus();
   if (!status.busy && status.authenticated) refreshFiles().catch(err => log(err.message, 'error'));
   if (status.busy) log('Proton CLI cache is currently busy. Wait for the active download to finish, then refresh.', 'warn');
-  // Load sync/fuse/conflict stats in background
+  // Load sync and conflict stats in background
   refreshSyncDashboard().catch(() => {});
-  refreshFuse().catch(() => {});
 }
 
 boot().catch(err => log(err.message, 'error'));

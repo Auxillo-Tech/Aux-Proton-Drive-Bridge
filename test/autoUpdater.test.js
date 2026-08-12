@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const http = require('node:http');
-const { createAutoUpdater, isSafeAssetName, parseChecksums, releaseKeyId, verifyChecksumManifestSignature, verifyFileSha256 } = require('../src/main/autoUpdater');
+const { createAutoUpdater, detectLinuxPackageType, isSafeAssetName, parseChecksums, releaseKeyId, verifyChecksumManifestSignature, verifyFileSha256 } = require('../src/main/autoUpdater');
 
 describe('autoUpdater — version parsing and comparison', () => {
   const updater = createAutoUpdater({ currentVersion: '0.3.0', logger: { info: () => {}, warn: () => {}, error: () => {} } });
@@ -84,11 +84,48 @@ describe('autoUpdater — create with mock', () => {
   });
 
   it('only selects an AppImage whose version matches the exact release tag', () => {
-    const updater = createAutoUpdater({ currentVersion: '0.3.0' });
+    const updater = createAutoUpdater({ currentVersion: '0.3.0', packageType: 'appimage' });
     const stale = { name: 'Aux.Proton.Drive.Bridge-0.3.0-x86_64.AppImage', state: 'uploaded' };
     const current = { name: 'Aux.Proton.Drive.Bridge-0.3.1-x86_64.AppImage', state: 'uploaded' };
     assert.strictEqual(updater.getBestAsset({ version: '0.3.1', tagName: 'v0.3.1', assets: [stale, current] }), current);
     assert.strictEqual(updater.getBestAsset({ version: '0.3.1', tagName: 'v0.3.2', assets: [current] }), null);
+  });
+
+  it('selects the package format that matches the current Linux installation', () => {
+    const appImage = { name: 'Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage', state: 'uploaded' };
+    const rpm = { name: 'Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm', state: 'uploaded' };
+    const deb = { name: 'Aux.Proton.Drive.Bridge-0.3.6-amd64.deb', state: 'uploaded' };
+    const release = { version: '0.3.6', tagName: 'v0.3.6', assets: [appImage, rpm, deb] };
+
+    assert.strictEqual(createAutoUpdater({ currentVersion: '0.3.5', packageType: 'rpm' }).getBestAsset(release), rpm);
+    assert.strictEqual(createAutoUpdater({ currentVersion: '0.3.5', packageType: 'deb' }).getBestAsset(release), deb);
+    assert.strictEqual(createAutoUpdater({ currentVersion: '0.3.5', packageType: 'appimage' }).getBestAsset(release), appImage);
+  });
+
+  it('detects deb/rpm families and falls back to AppImage everywhere else', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-os-release-'));
+    const osRelease = (content) => {
+      const file = path.join(tempDir, `os-release-${crypto.randomUUID()}`);
+      fs.writeFileSync(file, content);
+      return file;
+    };
+    const detect = (content, env = {}) =>
+      detectLinuxPackageType({ platform: 'linux', env, osReleasePath: osRelease(content) });
+
+    try {
+      assert.strictEqual(detect('ID=ubuntu\nID_LIKE=debian\n'), 'deb');
+      assert.strictEqual(detect('ID=fedora\n'), 'rpm');
+      assert.strictEqual(detect('ID=opensuse-tumbleweed\nID_LIKE=opensuse suse\n'), 'rpm');
+      assert.strictEqual(detect('ID=arch\n'), 'appimage');
+      assert.strictEqual(detect('ID=fedora\n', { APPIMAGE: '/tmp/app.AppImage' }), 'appimage');
+      assert.strictEqual(
+        detectLinuxPackageType({ platform: 'linux', env: {}, osReleasePath: path.join(tempDir, 'missing') }),
+        'appimage'
+      );
+      assert.strictEqual(detectLinuxPackageType({ platform: 'darwin', env: {} }), null);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -151,7 +188,7 @@ it('follows redirects and verifies the release checksum before exposing a downlo
   baseUrl = `http://127.0.0.1:${server.address().port}`;
   const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-updater-http-'));
   try {
-    const updater = createAutoUpdater({ currentVersion: '1.0.0', releasesApi: `${baseUrl}/releases`, releasePublicKey: publicPem, downloadDir, logger: { info() {}, warn() {}, error() {} } });
+    const updater = createAutoUpdater({ currentVersion: '1.0.0', packageType: 'appimage', releasesApi: `${baseUrl}/releases`, releasePublicKey: publicPem, downloadDir, logger: { info() {}, warn() {}, error() {} } });
     const checked = await updater.checkForUpdates();
     assert.strictEqual(checked.hasUpdate, true);
     const downloaded = await updater.downloadUpdate();

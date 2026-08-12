@@ -53,6 +53,8 @@ function createSyncEngine(options = {}) {
   const statusProvider = options.getStatus || getStatus;
   const protonRunner = options.runProton || runProton;
   const customListParser = options.parseListOutput || null;
+  const remoteListRetryDelayMs = Number.isFinite(Number(options.remoteListRetryDelayMs))
+    ? Math.max(0, Number(options.remoteListRetryDelayMs)) : 750;
   const defaultLocalFolder = path.resolve(options.localFolder || DEFAULT_LOCAL_FOLDER);
   if (!syncDb) throw new Error('syncDb is required');
 
@@ -516,7 +518,24 @@ function createSyncEngine(options = {}) {
         currentPath: current.remotePath,
         message: `Listing ${current.remotePath}`
       });
-      const result = await protonRunner('list', { path: current.remotePath, logLevel: 'ERROR' });
+      let result;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          result = await protonRunner('list', { path: current.remotePath, logLevel: 'ERROR' });
+          break;
+        } catch (error) {
+          const transient = /need to login|not logged in|unauthenticated|ECONN|ETIMEDOUT|network|rate limit|database is locked|SQLITE_BUSY|timeout|temporar|connection reset|\b429\b|\b5\d\d\b/i
+            .test(error?.message || '');
+          if (!transient || attempt === 3) throw error;
+          emit('warn', {
+            source: 'listRemoteTree',
+            message: `Retrying remote listing for ${current.remotePath} after transient CLI failure (${attempt}/3)`,
+            path: current.remotePath
+          });
+          await new Promise(resolve => setTimeout(resolve, remoteListRetryDelayMs * attempt));
+          throwIfCancelled(expectedGeneration, 'Remote traversal cancelled');
+        }
+      }
       throwIfCancelled(expectedGeneration, 'Remote traversal cancelled');
       const listedItems = customListParser
         ? await customListParser(result.stdout)
@@ -825,6 +844,68 @@ function createSyncEngine(options = {}) {
     }
   }
 
+  async function claimedContentMatches(item, local, expectedGeneration, expectedRequestVersion) {
+    if (!local || local.type !== item.type) return false;
+    if (item.type === 'folder') return true;
+    // Only sha1Verified digests may drive automatic pairing/conflict decisions; a
+    // client-claimed digest the CLI did not verify is treated as inconclusive.
+    const verifiedHash = item.hash || null;
+    if (!verifiedHash) return null;
+    if (Number(local.size) !== Number(item.size)) return false;
+    const localFingerprint = local.hash;
+    let digest;
+    try {
+      digest = await sha1File(local.path, expectedGeneration);
+    } catch (error) {
+      if (error?.cancelled) throw error;
+      // Unreadable/vanished local file: inconclusive, retry naturally next cycle.
+      return null;
+    }
+    throwIfCancelled(expectedGeneration, 'Remote content comparison cancelled');
+    if (authoritativeRequestSuperseded(expectedRequestVersion)) return null;
+    let current = null;
+    try {
+      const stat = fs.lstatSync(local.path);
+      if (!stat.isSymbolicLink() && stat.isFile()) current = localMetadata(local.path, stat);
+    } catch {}
+    if (!current || current.hash !== localFingerprint) {
+      requestAuthoritativeCycle();
+      return null;
+    }
+    return digest === verifiedHash;
+  }
+
+  async function reconcileEquivalentConflict(existing, local, remote, item, expectedGeneration, expectedRequestVersion) {
+    if (!conflictStore?.confirmEquivalent || !local || local.type !== remote.type) return false;
+    const conflict = conflictStore.listActive?.().find(entry => entry.remotePath === existing.remote_path);
+    if (!conflict || !['both_create', 'local_remote_modify'].includes(conflict.type)) return false;
+    if (local.type === 'file' && Number(local.size) !== Number(remote.size)) return false;
+    const matches = await claimedContentMatches(item, local, expectedGeneration, expectedRequestVersion);
+    if (matches !== true) return false;
+    syncDb.upsertTrackedFile({
+      remotePath: existing.remote_path,
+      localPath: existing.local_path || local.path,
+      type: local.type,
+      size: remote.size,
+      localSize: local.size,
+      remoteSize: remote.size,
+      localModified: local.modified,
+      remoteModified: remote.modified,
+      localHash: local.hash,
+      remoteHash: remote.hash
+    });
+    conflictStore.confirmEquivalent(conflict.id, {
+      method: local.type === 'folder' ? 'folder_structure' : 'sha1',
+      digest: item.hash || null
+    });
+    emit('conflict_resolved', {
+      conflictId: conflict.id,
+      strategy: 'matched_content',
+      remotePath: existing.remote_path
+    });
+    return true;
+  }
+
   async function processRemoteBatch(items, context) {
     const {
       seen, changeCounts, expectedGeneration, expectedRequestVersion
@@ -863,6 +944,16 @@ function createSyncEngine(options = {}) {
           changeCounts.created++;
         }
         continue;
+      }
+
+      if (existing.sync_state === 'conflict') {
+        const reconciled = await reconcileEquivalentConflict(
+          existing, local, remote, item, expectedGeneration, expectedRequestVersion
+        );
+        if (reconciled) {
+          paired++;
+          continue;
+        }
       }
 
       if (existing.sync_state === 'uploading' && existing.upload_verification_local_hash) {
@@ -959,6 +1050,16 @@ function createSyncEngine(options = {}) {
       if (existing.sync_state === 'local_new' && local && remote && local.type === remote.type) {
         const sizesMatch = local.type === 'folder' || Number(local.size || 0) === Number(remote.size || 0);
         if (sizesMatch) {
+          const hasVerifiedDigest = local.type === 'file' && Boolean(item.hash);
+          const contentMatches = hasVerifiedDigest
+            ? await claimedContentMatches(item, local, expectedGeneration, expectedRequestVersion)
+            : true;
+          if (contentMatches === null) continue;
+          if (contentMatches === false) {
+            const conflict = recordConflict(local, remote, null);
+            if (conflict) conflictsOpened++;
+            continue;
+          }
           syncDb.upsertTrackedFile({
             remotePath,
             localPath: existing.local_path || localPath,
@@ -1262,6 +1363,21 @@ function createSyncEngine(options = {}) {
     }
   }
 
+  function requestNextBatchAfterQueueDrain() {
+    if (!schedulerActive || stoppingPromise) return;
+    setImmediate(() => {
+      if (!schedulerActive || stoppingPromise || cycleRunning) return;
+      const queueState = transferQueue?.getState?.();
+      if (queueState && (queueState.active.length || queueState.pending.length)) return;
+      const counts = syncDb.countByState();
+      const uploadPending = canUpload() && ['pending_upload', 'local_new', 'local_modified']
+        .some(state => Number(counts[state] || 0) > 0);
+      const downloadPending = canDownload() && ['pending_download', 'remote_new', 'remote_modified']
+        .some(state => Number(counts[state] || 0) > 0);
+      if (uploadPending || downloadPending) requestAuthoritativeCycle();
+    });
+  }
+
   function setupQueueListeners() {
     if (!transferQueue?.on) return;
     if (queueRemoveHandlers.length) return;
@@ -1400,6 +1516,7 @@ function createSyncEngine(options = {}) {
       }
       if (completedUploadPaths.length) requestAuthoritativeCycle();
       maybeEmitSyncComplete();
+      requestNextBatchAfterQueueDrain();
     }));
     const restoreFailedTransfer = payload => {
       if (!syncTransferIds.delete(payload.id)) return false;

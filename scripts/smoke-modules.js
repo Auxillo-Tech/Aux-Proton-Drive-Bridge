@@ -62,17 +62,14 @@ const au = createAutoUpdater({ currentVersion: packageVersion });
 const parsedVersion = au.parseVersion(packageVersion);
 console.log(`   ✓ autoUpdater created (version ${parsedVersion.major}.${parsedVersion.minor}.${parsedVersion.patch})`);
 
-// 7. FUSE mount
-console.log('\n7. Loading fuseMount…');
-const { createFuseMount, MOUNT_STATE } = require(path.join(root, 'src/main/fuseMount'));
-const fm = createFuseMount({ mountPoint: path.join(os.tmpdir(), 'smoke-fuse-test') });
-console.log('   ✓ fuseMount created');
-console.log(`   status: ${fm.getStatus().state}, mounts: ${Object.values(MOUNT_STATE).join(', ')}`);
+// 7. Linux graphics compatibility
+console.log('\n7. Loading linuxGraphics…');
+const { detectLinuxGraphicsWorkaround } = require(path.join(root, 'src/main/linuxGraphics'));
+console.log(`   ✓ linuxGraphics loaded (${detectLinuxGraphicsWorkaround()?.reason || 'no workaround required'})`);
 
 // 8. Cleanup
 console.log('\n8. Cleanup…');
 syncDb.close();
-fm.destroy();
 tq.destroy();
 try { fs.rmSync(path.dirname(tmpDbPath), { recursive: true }); } catch {}
 

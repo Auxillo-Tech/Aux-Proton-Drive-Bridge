@@ -10,7 +10,7 @@ Pont de bureau Linux non officiel pour Proton Drive utilisant la CLI officielle 
 
 ## Statut
 
-Version **`0.3.3`** - Synchronisation complète, file d'attente de transfert, résolution de conflits et prise en charge du montage FUSE.
+Version **`0.3.6`** - Synchronisation fiable, file d'attente de transfert, récupération des conflits et mises à jour signées.
 
 Aux Proton Drive Bridge offre aux utilisateurs Linux une interface graphique pour les opérations Proton Drive via la CLI officielle de Proton.
 
@@ -25,29 +25,29 @@ Aux Proton Drive Bridge offre aux utilisateurs Linux une interface graphique pou
 - **Mise à jour automatique** - Vérification et téléchargement des mises à jour basés sur GitHub Releases
 - **Signature des versions** - Scripts de signature GPG et signify/minisign
 - **Intégration gestionnaire de fichiers** - Scripts de menu contextuel pour Nautilus, Dolphin, Thunar
-- **Montage FUSE optionnel** - Monter Proton Drive comme un répertoire du système de fichiers
-- **Interface à onglets** - Onglets séparés pour Fichiers, Tableau de bord Sync, Conflits, File d'attente, FUSE et Mises à jour
+- **Récupération automatique** - Reprendre les transferts volumineux et réconcilier les anciens conflits identiques
+- **Interface à onglets** - Onglets séparés pour Fichiers, Tableau de bord Sync, Conflits, File d'attente et Mises à jour
 
 ## Installation rapide
 
 ### AppImage
 Télécharger et exécuter :
 ```
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
 ```
 Rendre exécutable et lancer depuis le gestionnaire de fichiers ou le terminal.
 
 ### Debian / Ubuntu / Mint / Pop!_OS
 Télécharger :
 ```
-Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
 ```
 Installer avec l'installateur graphique ou avec `apt`/`dpkg`.
 
 ### Fedora / RHEL / openSUSE
 Télécharger :
 ```
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
 ```
 Installer avec l'installateur graphique, `dnf`, `zypper` ou `rpm`.
 
@@ -58,7 +58,7 @@ Installer avec l'installateur graphique, `dnf`, `zypper` ou `rpm`.
 - Un compte Proton
 - Accès au navigateur pour la connexion Proton
 - Stockage de secrets Linux pris en charge par Proton CLI (KWallet, GNOME Keyring/libsecret ou `pass`)
-- FUSE : optionnel, requis uniquement pour la fonction de montage FUSE
+
 
 ## Modèle de sécurité
 

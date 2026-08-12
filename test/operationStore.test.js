@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createOperationStore, redactSensitive, sanitizeForStorage } = require('../src/main/operationStore');
+const { createOperationStore, redactSensitive, sanitizeForStorage, shouldForwardOperationEvent } = require('../src/main/operationStore');
 
 test('operation store persists operation lifecycle', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-proton-ops-'));
@@ -35,6 +35,49 @@ test('operation store redacts auth payloads and tokens', () => {
   assert.equal(generic.includes('opaque-value'), false);
   assert.equal(generic.includes(awsLike), false);
   assert.equal(generic.includes('BEGIN PRIVATE KEY'), false);
+});
+
+test('large remote listing stdout is not forwarded to the renderer or persistent history', () => {
+  assert.equal(shouldForwardOperationEvent('list', { stream: 'stdout', text: '[{"name":"private"}]' }), false);
+  assert.equal(shouldForwardOperationEvent('list', { stream: 'stderr', text: 'warning' }), true);
+  assert.equal(shouldForwardOperationEvent('download', { stream: 'stdout', text: 'progress' }), true);
+});
+
+test('browser login URLs are not forwarded to renderer activity or persistent history', () => {
+  assert.equal(shouldForwardOperationEvent('login', {
+    stream: 'stdout',
+    text: 'Open https://account.proton.me/auth?payload=private-browser-ticket'
+  }), false);
+  assert.equal(shouldForwardOperationEvent('login', { stream: 'system', text: 'Proton sign-in URL opened in the browser' }), true);
+});
+
+test('operation store bounds retained operations, events, and event text', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-proton-ops-bounds-'));
+  const file = path.join(dir, 'operations.json');
+  const store = createOperationStore(file);
+  const detailed = store.begin('download', { detail: true });
+  for (let eventIndex = 0; eventIndex < 55; eventIndex++) {
+    store.appendEvent(detailed.id, 'stdout', `${eventIndex}:${'x'.repeat(1500)}`);
+  }
+  store.finish(detailed.id, 'succeeded', { code: 0 });
+  for (let opIndex = 0; opIndex < 205; opIndex++) {
+    const op = store.begin('download', { index: opIndex });
+    store.finish(op.id, 'succeeded', { code: 0 });
+  }
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.strictEqual(data.operations.length, 200);
+  const saved = data.operations.find(operation => operation.id === detailed.id);
+  // The detailed operation is deliberately older than the 200-operation cap.
+  assert.strictEqual(saved, undefined);
+
+  const recent = store.begin('download', { detail: 'recent' });
+  for (let eventIndex = 0; eventIndex < 55; eventIndex++) {
+    store.appendEvent(recent.id, 'stdout', `${eventIndex}:${'x'.repeat(1500)}`);
+  }
+  const current = store.list(1)[0];
+  assert.strictEqual(current.events.length, 50);
+  assert.ok(current.events.every(event => event.text.length <= 1000));
+  assert.ok(fs.statSync(file).size < 2 * 1024 * 1024, 'operation history exceeded its bounded storage envelope');
 });
 
 test('operation store recovers stale running operations from interrupted sessions', () => {
