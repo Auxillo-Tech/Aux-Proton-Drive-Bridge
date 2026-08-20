@@ -60,12 +60,22 @@ function getJson(pathname) {
     if (!String(page.title).includes('Aux Proton Drive Bridge')) throw new Error(`Unexpected title: ${page.title}; logs=${output.slice(-2000)}`);
     console.log('packaged AppImage smoke passed:', appImage, page.title);
   } finally {
-    killTree(child.pid, 'SIGTERM');
-    const killer = setTimeout(() => killTree(child.pid, 'SIGKILL'), 1200);
-    await Promise.race([
-      new Promise(resolve => child.once('close', resolve)),
-      new Promise(resolve => setTimeout(resolve, 2500))
+    // Graceful first. Under APPIMAGE_EXTRACT_AND_RUN the wrapper process does
+    // not forward signals, so aim SIGTERM at the extracted Electron main
+    // process (the descendant without a --type= child-process flag) instead.
+    // Signalling the whole tree kills renderers out from under Chromium and
+    // manufactures SIGTRAP core dumps.
+    const mainPid = descendantPids(child.pid).find(pid => {
+      try { return !fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('--type='); } catch { return false; }
+    }) ?? child.pid;
+    try { process.kill(mainPid, 'SIGTERM'); } catch {}
+    const exited = await Promise.race([
+      new Promise(resolve => child.once('close', () => resolve(true))),
+      new Promise(resolve => setTimeout(() => resolve(false), 30_000))
     ]);
-    clearTimeout(killer);
+    if (!exited) {
+      killTree(child.pid, 'SIGKILL');
+      throw new Error('App did not exit within 30s of SIGTERM (graceful shutdown regression)');
+    }
   }
 })().then(() => process.exit(0)).catch(err => { console.error(err); killTree(child.pid, 'SIGKILL'); process.exit(1); });

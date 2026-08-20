@@ -253,16 +253,19 @@ function cleanupDisposableRemote() {
     }));
   } finally {
     cdp?.close();
-    killTree('SIGTERM');
-    await Promise.race([
-      new Promise(resolve => child.once('close', resolve)),
-      new Promise(resolve => setTimeout(resolve, 2500))
+    // Graceful first: SIGTERM to the main process only. Tree-wide TERM kills
+    // renderers out from under Chromium and manufactures SIGTRAP core dumps.
+    try { process.kill(child.pid, 'SIGTERM'); } catch {}
+    const gracefulExit = await Promise.race([
+      new Promise(resolve => child.once('close', () => resolve(true))),
+      new Promise(resolve => setTimeout(() => resolve(false), 30_000))
     ]);
-    killTree('SIGKILL');
+    if (!gracefulExit) killTree('SIGKILL');
     try {
       if (uploaded || remoteExists('/my-files', name) || remoteExists('/trash', name)) cleanupDisposableRemote();
     } catch (error) { console.error(`WARNING: ${error.message}`); }
     fs.rmSync(tempRoot, { recursive: true, force: true });
+    if (!gracefulExit) throw new Error('App did not exit within 30s of SIGTERM (graceful shutdown regression)');
   }
 })().then(() => process.exit(0)).catch(error => {
   console.error(error.stack || error.message);

@@ -721,6 +721,10 @@ trustedHandle('update:getAvailable', async () => getAutoUpdater().getAvailableUp
 // ── App lifecycle ───────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // A second instance loses the singleton lock and is already quitting, but
+  // ready still fires; running startup here would execute forwarded commands
+  // (e.g. --upload) a second time in this doomed process.
+  if (!hasSingleInstanceLock) return;
   const startupCommand = parseExternalCommand(process.argv);
   if (startupCommand?.action === 'install-file-manager-integration') {
     try {
@@ -750,13 +754,15 @@ app.whenReady().then(async () => {
   getAutoUpdater().startPeriodicCheck();
   handleExternalCommand(process.argv).catch(error => sendProgress({ stream: 'stderr', text: error.message || String(error) }));
 });
+const SHUTDOWN_CEILING_MS = 15_000;
+const QUIT_BACKSTOP_MS = 5_000;
 app.on('before-quit', (event) => {
   if (shutdownComplete) return;
   event.preventDefault();
   if (shutdownStarted) return;
   shutdownStarted = true;
   isQuitting = true;
-  Promise.resolve().then(async () => {
+  const cleanup = (async () => {
     // Stop timers
     if (schedulerTimer) { clearInterval(schedulerTimer); schedulerTimer = null; }
     // Stop sync engine
@@ -771,14 +777,25 @@ app.on('before-quit', (event) => {
     if (syncEngine) syncEngine.destroy();
     // Close sync DB last
     if (syncDb) { try { syncDb.close(); } catch {} }
-  }).catch((err) => {
-    console.error('Shutdown error:', err);
-  }).finally(() => {
+  })();
+  // A hung cleanup step must never leave a headless zombie process behind.
+  const ceiling = new Promise(resolve => setTimeout(resolve, SHUTDOWN_CEILING_MS).unref());
+  Promise.race([cleanup.catch((err) => { console.error('Shutdown error:', err); }), ceiling]).then(() => {
     shutdownComplete = true;
     app.quit();
+    // Electron cancels an in-flight quit if window-all-closed is subscribed and windows
+    // are already gone; if the re-quit below doesn't finish either, force the exit.
+    setTimeout(() => app.exit(0), QUIT_BACKSTOP_MS).unref();
   });
 });
 app.on('window-all-closed', () => {
+  // Once shutdown has finished, quit must be re-issued from this event or Electron
+  // abandons the quit sequence and the process lingers with no window (tray-only apps).
+  if (shutdownComplete) { app.quit(); return; }
   if (process.platform === 'darwin') return;
 });
+// Session logout / systemd stop deliver SIGTERM; treat both as an orderly quit.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => { isQuitting = true; app.quit(); });
+}
 app.on('activate', () => { showMainWindow(); });

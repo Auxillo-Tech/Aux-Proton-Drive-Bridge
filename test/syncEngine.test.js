@@ -1707,6 +1707,38 @@ describe('syncEngine - end-to-end state orchestration', () => {
     assert.deepEqual(tracked, ['/my-files/Videos', '/my-files/keep.txt']);
   });
 
+  it('excludes ignored remote items from tracking and does not traverse ignored remote folders', async () => {
+    const sub = path.join(dir, 'tree');
+    engine.destroy();
+    fs.mkdirSync(sub, { recursive: true });
+    const listedPaths = [];
+    engine = createSyncEngine({
+      syncDb: db,
+      transferQueue: queue,
+      conflictStore: store,
+      localFolder: sub,
+      ignorePatterns: ['Videos', '*.iso'],
+      getStatus: async () => ({ installed: true, authenticated: true, busy: false }),
+      runProton: async (_action, args = {}) => {
+        listedPaths.push(args.path);
+        if (args.path !== '/my-files') throw new Error(`Ignored folder must not be traversed: ${args.path}`);
+        return {
+          code: 0,
+          stdout: JSON.stringify([
+            { name: { ok: true, value: 'Videos' }, type: 'folder' },
+            { name: { ok: true, value: 'image.iso' }, type: 'file', activeRevision: { value: { claimedSize: 1, claimedModificationTime: '2026-08-12T12:00:00Z' } } },
+            { name: { ok: true, value: 'keep.txt' }, type: 'file', activeRevision: { value: { claimedSize: 1, claimedModificationTime: '2026-08-12T12:00:00Z' } } }
+          ]),
+          stderr: ''
+        };
+      }
+    });
+    await engine.pollRemote();
+    const tracked = db.listTrackedFiles().map(item => item.remote_path);
+    assert.deepEqual(tracked, ['/my-files/keep.txt']);
+    assert.deepEqual(listedPaths, ['/my-files']);
+  });
+
   it('applies updated ignore patterns live and reports them in state', async () => {
     const sub = path.join(dir, 'tree');
     createEngineForTree(sub, []);

@@ -23,6 +23,7 @@ const args = process.env.E2E_EXECUTABLE
 const env = { ...process.env, ELECTRON_ENABLE_LOGGING: '1', AUX_PROTON_DRIVE_USER_DATA_DIR: userDataDir };
 const child = spawn(executable, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let processOutput = '';
+let gracefulExit = true;
 child.stdout.on('data', data => { processOutput += data; });
 child.stderr.on('data', data => { processOutput += data; });
 
@@ -292,17 +293,40 @@ function connectCdp(url) {
     }));
   } finally {
     cdp?.close();
-    killTree('SIGTERM');
-    await Promise.race([
-      new Promise(resolve => child.once('close', resolve)),
-      new Promise(resolve => setTimeout(resolve, 2000))
+    // Graceful first: SIGTERM to the main process only. Tree-wide TERM kills
+    // renderers out from under Chromium and manufactures SIGTRAP core dumps.
+    try { process.kill(child.pid, 'SIGTERM'); } catch {}
+    gracefulExit = await Promise.race([
+      new Promise(resolve => child.once('close', () => resolve(true))),
+      new Promise(resolve => setTimeout(() => resolve(false), 30_000))
     ]);
-    killTree('SIGKILL');
+    if (!gracefulExit) killTree('SIGKILL');
     fs.rmSync(syncFolder, { recursive: true, force: true });
     fs.rmSync(secondFolder, { recursive: true, force: true });
     fs.rmSync(unapprovedFile, { force: true });
     fs.rmSync(unapprovedDir, { recursive: true, force: true });
     fs.rmSync(userDataDir, { recursive: true, force: true });
+    // The command upload is queued while paused and then cancelled, so it must
+    // never reach the real account; if a race ever lets it slip through, remove
+    // the disposable file instead of leaking it into the user's Drive.
+    try {
+      const commandUploadName = path.basename(commandUploadFile);
+      if (!/^edi-e2e-temp-command-upload-\d+\.txt$/.test(commandUploadName)) throw new Error(`Refusing unsafe cleanup name: ${commandUploadName}`);
+      const listRemote = parent => {
+        const result = childProcess.spawnSync('proton-drive', ['filesystem', 'list', '-j', parent], { encoding: 'utf8', timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
+        if (result.status !== 0) return [];
+        try { return JSON.parse(result.stdout); } catch { return []; }
+      };
+      const existsRemote = parent => listRemote(parent).some(item => item?.name?.ok && item.name.value === commandUploadName);
+      if (existsRemote('/my-files')) {
+        console.error(`WARNING: cancelled command upload leaked to /my-files, removing ${commandUploadName}`);
+        childProcess.spawnSync('proton-drive', ['filesystem', 'trash', `/my-files/${commandUploadName}`], { encoding: 'utf8', timeout: 120_000 });
+      }
+      if (existsRemote('/trash')) {
+        childProcess.spawnSync('proton-drive', ['filesystem', 'delete', `/trash/${commandUploadName}`], { encoding: 'utf8', timeout: 120_000 });
+      }
+    } catch (error) { console.error(`WARNING: ${error.message}`); }
+    if (!gracefulExit) throw new Error('App did not exit within 30s of SIGTERM (graceful shutdown regression)');
   }
 })().then(() => process.exit(0)).catch(error => {
   console.error(error.stack || error.message);

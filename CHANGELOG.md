@@ -4,6 +4,24 @@ All notable releases of Aux Proton Drive Bridge are listed here.
 The GitHub Releases page is the canonical source for installable artifacts:
 https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases
 
+## 0.3.7 - 2026-08-20
+
+Shutdown and sync-correctness pass.
+
+### Fixed
+
+- Quitting no longer leaves a headless zombie process: Electron abandons an in-flight quit when the last window closes while `window-all-closed` is subscribed, so the app now re-issues the quit from that event once shutdown cleanup has finished
+- A hung shutdown step can no longer block exit forever: cleanup runs under a hard ceiling and the final quit is backstopped by a forced exit
+- SIGTERM and SIGINT (session logout, `systemctl stop`, service managers) now trigger the same orderly shutdown as quitting from the tray
+- File-manager and command-line uploads no longer run twice when the app is already open: the losing second instance was executing the forwarded command itself before quitting, in parallel with the primary instance
+- Selective-sync exclude patterns now fence the remote side too: ignored remote items are neither tracked nor downloaded in one-way-download and bidirectional modes, and ignored remote folders are not traversed (which also speeds up scans)
+
+### Changed
+
+- All test harnesses stop the app gracefully (SIGTERM to the main process, escalating to SIGKILL only after a 10-second timeout) instead of signalling the whole process tree, which crashed Chromium child processes and produced SIGTRAP core dumps on every run; each harness now fails if the app does not exit cleanly
+- New `npm run e2e:ui` walk drives every tab and safe button through the real renderer and exercises all four sync modes in both directions against the live account using disposable, fenced-off files only
+- The source E2E harness now verifies its cancelled command upload never reached the real account and removes it if a race ever lets it slip through
+
 ## 0.3.6 - 2026-08-12
 
 Full reliability and release-hardening pass.

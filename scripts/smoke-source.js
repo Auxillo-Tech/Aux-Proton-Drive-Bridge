@@ -82,13 +82,15 @@ function getJson(pathname) {
     if (!String(page.title).includes('Aux Proton Drive Bridge')) throw new Error(`Unexpected title: ${page.title}; url=${page.url}; logs=${output.slice(-1000)}`);
     console.log(`${process.env.SMOKE_EXECUTABLE ? 'installed package' : 'source'} smoke passed:`, page.title);
   } finally {
-    killTree(child.pid, 'SIGTERM');
-    const killer = setTimeout(() => killTree(child.pid, 'SIGKILL'), 1000);
-    await Promise.race([
-      new Promise(resolve => child.once('close', resolve)),
-      new Promise(resolve => setTimeout(resolve, 2200))
+    // Graceful first: SIGTERM to the main process only. Signalling the whole tree
+    // kills renderers out from under Chromium and manufactures SIGTRAP core dumps.
+    try { process.kill(child.pid, 'SIGTERM'); } catch {}
+    const exited = await Promise.race([
+      new Promise(resolve => child.once('close', () => resolve(true))),
+      new Promise(resolve => setTimeout(() => resolve(false), 30_000))
     ]);
-    clearTimeout(killer);
+    if (!exited) killTree(child.pid, 'SIGKILL');
     fs.rmSync(smokeRoot, { recursive: true, force: true });
+    if (!exited) throw new Error('App did not exit within 30s of SIGTERM (graceful shutdown regression)');
   }
 })().then(() => process.exit(0)).catch(err => { console.error(err); killTree(child.pid, 'SIGKILL'); process.exit(1); });

@@ -1,6 +1,6 @@
 {
   "name": "aux-proton-drive-bridge",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Unofficial Linux desktop bridge for Proton Drive using the official Proton Drive CLI.",
   "homepage": "https://auxillo.tech",
   "repository": {
@@ -27,6 +27,7 @@
     "smoke:modules": "node scripts/smoke-modules.js",
     "smoke:source": "node scripts/smoke-source.js",
     "e2e:source": "node scripts/e2e-source.js",
+    "e2e:ui": "node scripts/e2e-ui-walk.js",
     "e2e:restart": "node scripts/e2e-restart.js",
     "e2e:packaged": "node scripts/e2e-packaged.js",
     "e2e:live-installed": "node scripts/e2e-live-installed.js",

@@ -551,6 +551,9 @@ function createSyncEngine(options = {}) {
         if (!item?.name || item.name === '.' || item.name === '..') continue;
         if (all.length >= MAX_REMOTE_ITEMS) throw new Error(`Remote tree exceeded ${MAX_REMOTE_ITEMS} items`);
         const remotePath = normalizeRemotePath(current.remotePath, item.name);
+        // Exclude patterns fence both directions: an ignored remote item is
+        // neither tracked nor downloaded, and ignored folders are not traversed.
+        if (shouldIgnore([...current.segments, item.name].join('/'))) continue;
         const remote = { ...item, path: remotePath, segments: [...current.segments, item.name] };
         all.push(remote);
         batch.push(remote);

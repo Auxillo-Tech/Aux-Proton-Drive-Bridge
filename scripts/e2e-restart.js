@@ -85,12 +85,17 @@ async function launch(port, extraArgs = []) {
 
 async function stop(cdp) {
   cdp.close();
-  killTree('SIGTERM');
-  await Promise.race([
-    new Promise(resolve => child.once('close', resolve)),
-    new Promise(resolve => setTimeout(resolve, 3000))
+  // Graceful first: SIGTERM to the main process only. Tree-wide TERM kills
+  // renderers out from under Chromium and manufactures SIGTRAP core dumps.
+  try { process.kill(child.pid, 'SIGTERM'); } catch {}
+  const exited = await Promise.race([
+    new Promise(resolve => child.once('close', () => resolve(true))),
+    new Promise(resolve => setTimeout(() => resolve(false), 30_000))
   ]);
-  if (child.exitCode === null) killTree('SIGKILL');
+  if (!exited) {
+    killTree('SIGKILL');
+    throw new Error('App did not exit within 30s of SIGTERM (graceful shutdown regression)');
+  }
   await new Promise(resolve => setTimeout(resolve, 250));
 }
 
