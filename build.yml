@@ -33,8 +33,12 @@ linux:
   category: Network
   executableName: aux-proton-drive-bridge
   icon: assets/icon.png
-deb: {}
+deb:
+  fpm:
+    - packaging/linux/tech.auxillo.auxprotondrivebridge.metainfo.xml=/usr/share/metainfo/tech.auxillo.auxprotondrivebridge.metainfo.xml
 rpm:
+  fpm:
+    - packaging/linux/tech.auxillo.auxprotondrivebridge.metainfo.xml=/usr/share/metainfo/tech.auxillo.auxprotondrivebridge.metainfo.xml
   depends:
     - gtk3
     - libnotify

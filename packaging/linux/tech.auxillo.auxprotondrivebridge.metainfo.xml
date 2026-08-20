@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>tech.auxillo.auxprotondrivebridge</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Aux Proton Drive Bridge</name>
+  <summary>Sync and manage Proton Drive on the Linux desktop</summary>
+  <developer id="tech.auxillo">
+    <name>Auxillo</name>
+  </developer>
+  <description>
+    <p>
+      Aux Proton Drive Bridge is an unofficial Linux desktop app for Proton Drive,
+      built on top of Proton's official proton-drive command-line client. It gives
+      Proton Drive users on Linux the sync client Proton does not ship yet.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Browse, upload, and download files in your Proton Drive</li>
+      <li>Background sync in four modes: conservative, one-way upload, one-way download, and bidirectional</li>
+      <li>Selective sync with exclude patterns that fence both upload and download</li>
+      <li>Conflict detection with safe, reviewable resolution</li>
+      <li>Transfer queue with pause, resume, and cancel, plus persistent transfer history</li>
+      <li>One-way backup profiles for scheduled folder backups</li>
+      <li>System tray operation and file-manager integration</li>
+      <li>Signed releases with an in-app updater</li>
+    </ul>
+    <p>
+      This project is not affiliated with or endorsed by Proton AG. It drives the
+      official Proton Drive CLI, so your credentials stay with Proton's own tooling.
+    </p>
+  </description>
+  <launchable type="desktop-id">aux-proton-drive-bridge.desktop</launchable>
+  <categories>
+    <category>Network</category>
+    <category>FileTransfer</category>
+  </categories>
+  <keywords>
+    <keyword>proton</keyword>
+    <keyword>proton drive</keyword>
+    <keyword>sync</keyword>
+    <keyword>cloud</keyword>
+    <keyword>backup</keyword>
+    <keyword>drive</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge</url>
+  <url type="bugtracker">https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/issues</url>
+  <url type="donation">https://buymeacoffee.com/auxillo</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Files view with transfer controls</caption>
+      <image>https://raw.githubusercontent.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/main/docs/screenshots/files-tab.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Sync dashboard with live activity</caption>
+      <image>https://raw.githubusercontent.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/main/docs/screenshots/sync-tab.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.3.7" date="2026-08-20">
+      <description>
+        <p>Shutdown and sync-correctness pass: reliable quit on Linux, single-instance upload deduplication, and selective-sync exclude patterns that now fence downloads as well as uploads.</p>
+      </description>
+    </release>
+    <release version="0.3.6" date="2026-08-12">
+      <description>
+        <p>Reliability and release-hardening pass across transfers, sync integrity, and the in-app updater.</p>
+      </description>
+    </release>
+  </releases>
+</component>

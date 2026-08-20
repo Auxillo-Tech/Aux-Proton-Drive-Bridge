@@ -209,7 +209,9 @@ async function refreshFiles() {
   log('Listing /my-files…');
   const result = await api.listMyFiles();
   state.items = result.items;
-  state.selected = new Set(result.items.filter(i => i.type === 'folder').map(i => i.name));
+  // Start with nothing selected: pre-selecting every folder made the next
+  // "Download selected" click fetch the entire drive by accident.
+  state.selected = new Set();
   renderFiles();
   log(`Loaded ${result.items.length} remote entries.`);
 }
