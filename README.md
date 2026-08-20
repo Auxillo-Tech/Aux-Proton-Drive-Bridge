@@ -2,210 +2,111 @@
 
 # Aux Proton Drive Bridge
 
+[![CI](https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Auxillo-Tech/Aux-Proton-Drive-Bridge?include_prereleases)](https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Auxillo-Tech/Aux-Proton-Drive-Bridge/total)](https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20x86__64-black.svg)](#)
-[![Release](https://img.shields.io/github/v/release/Auxillo-Tech/Aux-Proton-Drive-Bridge?include_prereleases)](https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases)
+[![Platform](https://img.shields.io/badge/platform-Linux%20x86__64-black.svg)](#requirements)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/auxillo)
 
+**The Proton Drive desktop client Linux is missing.** Browse, upload, download, and sync your Proton Drive — with one-way and bidirectional sync, selective sync, conflict handling, a transfer queue, and signed releases. Built on Proton's official `proton-drive` CLI, so your credentials never leave Proton's own tooling.
 
-Unofficial Linux desktop bridge for Proton Drive using Proton's official `proton-drive` CLI.
+> Unofficial community project. Not affiliated with, endorsed by, or sponsored by Proton AG.
 
-> Not affiliated with, endorsed by, or sponsored by Proton AG.
+![Files view](docs/screenshots/files-tab.png)
 
-## Status
+## Why this exists
 
-Version **`0.3.6`** - Reliable sync, transfer queue, conflict recovery, and signed updates.
+Proton does not ship a Linux desktop client for Proton Drive. Their official CLI does the heavy lifting but lives in a terminal. Aux Proton Drive Bridge wraps that CLI in a full desktop app: background sync, a live queue, conflict review, tray operation, and an updater — while authentication and encryption stay entirely with Proton's own client.
 
-Aux Proton Drive Bridge gives Linux users a GUI for Proton Drive operations through Proton's official CLI. It includes persistent sync metadata, bidirectional sync, a live transfer queue, conflict management, and signed updates.
+## Features
 
-## Download
+- **Browse and transfer** — list `/my-files`, download selected items or everything, upload files and folders
+- **Background sync engine** — four modes: conservative (upload-only, skip existing), one-way upload, one-way download, and full bidirectional
+- **Selective sync** — exclude patterns fence both directions: excluded items are neither uploaded nor downloaded, and excluded remote folders are not even traversed
+- **Conflict detection & review** — modified-both-sides, delete-vs-modify, type and hash mismatches, each with safe resolution strategies; sync never propagates deletions
+- **Transfer queue** — concurrent transfers with priority, pause/resume, cancel, retry, and persistent history
+- **One-way backup profiles** — scheduled folder backups with conservative semantics
+- **Desktop integration** — system tray, close-to-tray, file-manager context menus (Nautilus, Dolphin, Thunar), AppStream metadata for GNOME Software / KDE Discover
+- **Signed releases & in-app updater** — every release ships SHA-256 checksums signed with a pinned Ed25519 key; the updater picks the package format matching your install
 
-GitHub release:
+<p>
+  <img src="docs/screenshots/sync-tab.png" alt="Sync dashboard" width="49%">
+  <img src="docs/screenshots/queue-tab.png" alt="Transfer queue" width="49%">
+</p>
 
-<https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest>
+## Install
 
-Release assets include:
+Grab the latest release: **<https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest>**
 
-- AppImage for broad Linux compatibility
-- `.deb` for Debian/Ubuntu/Mint/Pop!_OS-family systems
-- `.rpm` for Fedora/RHEL/openSUSE-family systems
-- source archives
-- `SHA256SUMS.txt`
-- `release-manifest.json`
-- required Ed25519 signature (`SHA256SUMS.txt.sig`)
+| Distro family | Asset | Install |
+|---|---|---|
+| Any Linux x86_64 | `Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage` | make executable, run |
+| Debian / Ubuntu / Mint / Pop!_OS | `Aux.Proton.Drive.Bridge-<version>-amd64.deb` | `sudo apt install ./<file>.deb` |
+| Fedora / RHEL / openSUSE | `Aux.Proton.Drive.Bridge-<version>-x86_64.rpm` | `sudo dnf install ./<file>.rpm` |
+| Arch (manual) | `aux-proton-drive-bridge-<version>-aur.tar.gz` | PKGBUILD included |
 
-## What works now
+Full instructions per distro: [`docs/INSTALL.md`](docs/INSTALL.md)
 
-### v0.3.0 - New features
+### Verify your download
 
-- **Sync metadata DB** - SQLite-backed tracking of every tracked file's local and remote state
-- **Live transfer queue** - Concurrent transfers with priority, pause/resume, cancel, retry
-- **Progress parser** - Real-time parsing of proton-drive CLI output for transfer progress
-- **Conflict detection & resolution** - Detects LOCAL_REMOTE_MODIFY, LOCAL_DELETE_REMOTE_MODIFY, TYPE_MISMATCH, HASH_MISMATCH conflicts with resolution strategies
-- **Bidirectional sync engine** - Local filesystem watching via fs.watch + remote polling via CLI
-- **Sync modes** - Conservative (upload-only, skip existing), One-way upload, One-way download, Bidirectional
-- **Auto-updater** - GitHub Releases-based update checking and download
-- **Release signing** - GPG and signify/minisign signing scripts
-- **File manager integration** - Nautilus, Dolphin, Thunar context menu scripts
-- **Automatic recovery** - Resume large transfer sets, reconcile byte-identical legacy conflicts, and continue batches without waiting for the next poll
-- **Tabbed UI** - Separate tabs for Files, Sync Dashboard, Conflicts, Queue, and Updates
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
+```
 
-### v0.2.x - Existing features
-
-- Detects the installed Proton Drive CLI
-- Opens Proton browser login via `proton-drive auth login`
-- Lists `/my-files`
-- Downloads selected files/folders
-- Downloads all visible `/my-files` entries
-- Uploads local files/folders to `/my-files`
-- Lets the user choose a local destination folder
-- Opens the local download folder
-- Shows activity logs and persistent transfer history
-- Serializes Proton CLI operations to reduce SQLite cache-lock conflicts
-- Keeps Proton authentication in Proton CLI's configured OS secret store
-- One-way backup profile with scheduler (30 min)
-- System tray with quick actions
-- Background close-to-tray mode
-
-## Safe defaults
-
-Downloads use:
-- folder conflict strategy: `merge`
-- file conflict strategy: `skip`
-
-Existing local files should not be overwritten by default.
+`SHA256SUMS.txt.sig` is an Ed25519 signature over `SHA256SUMS.txt` made with the project's pinned release key (fingerprint `2148f39cd1004977cfde1d0a4be7b4fa`; the full public key is in `release-manifest.json`).
 
 ## Requirements
 
-- Linux x64
-- Proton Drive CLI available as `proton-drive`
-- A Proton account
-- Browser access for Proton login
-- Linux secret store supported by Proton CLI, such as KWallet, GNOME Keyring/libsecret, or `pass`
+- Linux x86_64
+- [Proton Drive CLI](https://proton.me/support/drive-cli) available as `proton-drive`
+- A Proton account and a browser for Proton's login flow
+- A secret store supported by the Proton CLI (KWallet, GNOME Keyring/libsecret, or `pass`)
 
+The CLI owns authentication; the bridge supports one active Proton session at a time.
 
-The installed CLI owns authentication. The bridge supports one active Proton account/session at a time; saved backup settings do not create separate authentication contexts.
+## Quick start
 
-## Quick install
+1. Install the Proton Drive CLI and confirm `proton-drive version` works.
+2. Launch Aux Proton Drive Bridge and click **Sign in** — the login completes in your browser.
+3. Click **Refresh files**, select items, pick a local folder, and download or upload.
+4. Open the **Sync** tab to start background sync in the mode you want.
+5. Review anything flagged in the **Conflicts** tab.
 
-### AppImage
-
-Download and run:
-
-```text
-Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
-```
-
-Make it executable and run it from your file manager or terminal.
-
-### Debian / Ubuntu / Mint / Pop!_OS
-
-Download:
-
-```text
-Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
-```
-
-Install with your graphical package installer or with `apt`/`dpkg`.
-
-### Fedora / RHEL / openSUSE
-
-Download:
-
-```text
-Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
-```
-
-Install with your graphical package installer, `dnf`, `zypper`, or `rpm`.
-
-See full instructions: [`docs/INSTALL.md`](docs/INSTALL.md).
-
-## How to use
-
-1. Install Proton Drive CLI and confirm `proton-drive version` works.
-2. Launch Aux Proton Drive Bridge.
-3. Click **Sign in**.
-4. Complete Proton login in the browser.
-5. Click **Refresh files**.
-6. Select files/folders from `/my-files`.
-7. Pick the local destination folder.
-8. Click **Download selected**, **Download everything**, or **Upload files/folders**.
-9. Check the **Sync** tab to start background sync.
-10. View **Conflicts** tab to resolve any detected conflicts.
-
-
-Sync never propagates deletion. It restores or preserves the surviving copy according to the selected direction instead of deleting cloud or local data. Skipped transfers remain unresolved and are shown as conflicts.
-
-See full usage guide: [`docs/USAGE.md`](docs/USAGE.md).
+Safe defaults: downloads merge folders and skip existing files; sync never deletes anything on either side. Full guide: [`docs/USAGE.md`](docs/USAGE.md)
 
 ## Documentation
 
-- [`docs/INSTALL.md`](docs/INSTALL.md) - install instructions by distro family
-- [`docs/USAGE.md`](docs/USAGE.md) - sign-in, list, download, upload, sync, workflow
-- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) - common Linux/CLI/keyring problems
-- [`docs/SECURITY.md`](docs/SECURITY.md) - credential handling and app security model
-- [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) - current release state and limitations
+- [`docs/INSTALL.md`](docs/INSTALL.md) — install instructions by distro family
+- [`docs/USAGE.md`](docs/USAGE.md) — sign-in, transfers, sync modes, workflows
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — common Linux/CLI/keyring problems
+- [`docs/SECURITY.md`](docs/SECURITY.md) — credential handling and app security model
+- [`CHANGELOG.md`](CHANGELOG.md) — release history
 
 ## Build from source
 
 ```bash
 npm ci
-npm run check
-npm start
+npm run check        # unit tests + static checks
+npm start            # run from source
+npm run dist:linux   # build AppImage, .deb, .rpm into dist/
 ```
-
-Build local release artifacts:
-
-```bash
-npm run check
-npm run dist:linux     # Build AppImage, .deb, .rpm on Linux
-```
-
-Release outputs are written to `dist/`.
 
 ## Security model
 
-Key points:
+- The app never asks for or sees your Proton password; login happens in Proton's own CLI/browser flow.
+- Renderer runs with `nodeIntegration` disabled and context isolation enabled; CLI calls are argv arrays, never shell strings.
+- Credentials and tokens are redacted from logs and stored history.
 
-- Aux Proton Drive Bridge never asks for your Proton password.
-- Authentication is delegated to Proton's official CLI/browser flow.
-- Renderer `nodeIntegration` is disabled.
-- Electron context isolation is enabled.
-- CLI calls are executed as argv arrays, not shell strings.
-- Credentials and tokens are redacted from logs and stored data.
-
-See [`docs/SECURITY.md`](docs/SECURITY.md).
+Details: [`docs/SECURITY.md`](docs/SECURITY.md) · Vulnerability reports: [`SECURITY.md`](SECURITY.md)
 
 ## Roadmap
 
-### v0.3.1
-
-Implemented foundations:
-
-- Sync metadata DB (SQLite)
-- Live transfer queue
-- Progress parser
-- Conflict system
-- Bidirectional sync
-- Auto-update via GitHub Releases
-- Signing/attestation scripts
-- File manager integration
-- Automatic AMD Navi 48 software-rendering fallback on affected Linux systems
-- Desktop notifications
-- Conflict review UI with metadata diff viewer
-
-### Future
-
-- AUR packaging - PKGBUILD available in `dist/aur/`
-- Flatpak packaging - not shipped until a sandboxed Proton CLI integration is validated
-- Wider distro qualification
-- Desktop notifications for all events
-- Advanced conflict diff viewer with content comparison
-- Multi-account simultaneous sync
-
----
+- AUR, Flathub, and Snap distribution
+- Desktop notifications for all sync events
+- Content-diff conflict viewer
+- Multi-account support
 
 ## Support
 
-Aux Proton Drive Bridge is free and open source. If it helps your workflow, you can [buy me a coffee](https://www.buymeacoffee.com/auxillo).
-
+Aux Proton Drive Bridge is free and open source (MIT). If it helps your workflow, you can [buy me a coffee](https://www.buymeacoffee.com/auxillo) ☕

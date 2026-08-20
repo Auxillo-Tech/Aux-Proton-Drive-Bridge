@@ -4,72 +4,68 @@
 
 # Aux Proton Drive Bridge
 
-Bridge desktop Linux non ufficiale per Proton Drive che utilizza la CLI ufficiale `proton-drive` di Proton.
+**Il client desktop di Proton Drive che manca a Linux.** Sfoglia, carica, scarica e sincronizza il tuo Proton Drive — con sincronizzazione unidirezionale e bidirezionale, sincronizzazione selettiva, gestione dei conflitti, coda dei trasferimenti e release firmate. Costruito sul CLI ufficiale `proton-drive` di Proton: le tue credenziali non lasciano mai gli strumenti di Proton.
 
-> Not affiliated with, endorsed by, or sponsored by Proton AG.
+> Progetto comunitario non ufficiale. Non affiliato, approvato o sponsorizzato da Proton AG.
 
-## Stato
+![Vista file](docs/screenshots/files-tab.png)
 
-Versione **`0.3.6`** - Sincronizzazione affidabile, coda di trasferimento, recupero dei conflitti e aggiornamenti firmati.
+## Perché esiste
 
-Aux Proton Drive Bridge offre agli utenti Linux un'interfaccia grafica per le operazioni di Proton Drive tramite la CLI ufficiale di Proton.
+Proton non offre un client desktop di Proton Drive per Linux. Il CLI ufficiale fa il lavoro pesante, ma vive nel terminale. Aux Proton Drive Bridge avvolge quel CLI in una vera applicazione desktop — autenticazione e cifratura restano interamente nel client di Proton.
 
-## Funzionalità principali
+## Funzionalità
 
-- **Database metadati sincronizzazione** - Tracciamento basato su SQLite dello stato locale e remoto di ogni file tracciato
-- **Coda di trasferimento live** - Trasferimenti simultanei con priorità, pausa/ripresa, annullamento, riprova
-- **Parser di avanzamento** - Analisi in tempo reale dell'output CLI di proton-drive per l'avanzamento dei trasferimenti
-- **Rilevamento e risoluzione conflitti** - Rileva LOCAL_REMOTE_MODIFY, LOCAL_DELETE_REMOTE_MODIFY, TYPE_MISMATCH, HASH_MISMATCH con strategie di risoluzione
-- **Motore di sincronizzazione bidirezionale** - Monitoraggio del filesystem locale tramite fs.watch + polling remoto tramite CLI
-- **Modalità di sincronizzazione** - Conservativa (solo upload, salta esistenti), Upload unidirezionale, Download unidirezionale, Bidirezionale
-- **Aggiornamento automatico** - Controllo e download aggiornamenti basato su GitHub Releases
-- **Firma dei rilasci** - Script di firma GPG e signify/minisign
-- **Integrazione file manager** - Script menu contestuale per Nautilus, Dolphin, Thunar
-- **Ripristino automatico** - Riprende i trasferimenti di grandi dimensioni e riconcilia i vecchi conflitti con contenuto identico
-- **Interfaccia a schede** - Schede separate per File, Dashboard Sync, Conflitti, Coda e Aggiornamenti
+- **Sfogliare e trasferire** — elencare `/my-files`, scaricare gli elementi selezionati o tutto, caricare file e cartelle
+- **Motore di sincronizzazione in background** — quattro modalità: conservativa (solo caricamento, salta gli esistenti), caricamento unidirezionale, download unidirezionale e bidirezionale completa
+- **Sincronizzazione selettiva** — i pattern di esclusione valgono in entrambe le direzioni: gli elementi esclusi non vengono né caricati né scaricati
+- **Rilevamento e revisione dei conflitti** — modifiche su entrambi i lati, eliminazione-contro-modifica, conflitti di tipo e di hash, con strategie sicure; la sincronizzazione non propaga mai le eliminazioni
+- **Coda dei trasferimenti** — trasferimenti concorrenti con priorità, pausa/ripresa, annullamento e cronologia persistente
+- **Profili di backup unidirezionale** — backup pianificati di cartelle con semantica conservativa
+- **Integrazione desktop** — vassoio di sistema, menu contestuali dei file manager (Nautilus, Dolphin, Thunar), metadati AppStream per GNOME Software / KDE Discover
+- **Release firmate e aggiornamenti integrati** — checksum SHA-256 firmati con una chiave Ed25519 fissa
 
-## Installazione rapida
+## Installazione
 
-### AppImage
-Scarica ed esegui:
+Ultima versione: **<https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest>**
+
+- **AppImage** per qualsiasi Linux x86_64 — rendere eseguibile e avviare
+- **`.deb`** per Debian / Ubuntu / Mint / Pop!_OS — `sudo apt install ./<file>.deb`
+- **`.rpm`** per Fedora / RHEL / openSUSE — `sudo dnf install ./<file>.rpm`
+- **Tarball AUR** per Arch (PKGBUILD incluso)
+
+Verifica il download:
+
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
 ```
-Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
-```
-Rendilo eseguibile e avvialo dal file manager o dal terminale.
 
-### Debian / Ubuntu / Mint / Pop!_OS
-Scarica:
-```
-Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
-```
-Installa con il gestore pacchetti grafico o con `apt`/`dpkg`.
-
-### Fedora / RHEL / openSUSE
-Scarica:
-```
-Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
-```
-Installa con il gestore pacchetti grafico, `dnf`, `zypper` o `rpm`.
+`SHA256SUMS.txt.sig` è una firma Ed25519 di `SHA256SUMS.txt` (impronta `2148f39cd1004977cfde1d0a4be7b4fa`, chiave pubblica in `release-manifest.json`).
 
 ## Requisiti
 
-- Linux x64
+- Linux x86_64
 - Proton Drive CLI disponibile come `proton-drive`
-- Un account Proton
-- Accesso al browser per il login Proton
-- Archivio segreti Linux supportato da Proton CLI (KWallet, GNOME Keyring/libsecret o `pass`)
+- Un account Proton e un browser per l'accesso Proton
+- Un portachiavi supportato dal CLI (KWallet, GNOME Keyring/libsecret o `pass`)
 
+## Avvio rapido
 
-## Modello di sicurezza
+1. Installa il Proton Drive CLI e verifica che `proton-drive version` funzioni.
+2. Avvia Aux Proton Drive Bridge e premi **Sign in** — l'accesso si completa nel browser.
+3. Premi **Refresh files**, seleziona gli elementi, scegli una cartella locale, scarica o carica.
+4. Apri la scheda **Sync** per avviare la sincronizzazione nella modalità desiderata.
+5. Controlla ciò che viene segnalato nella scheda **Conflicts**.
 
-Aux Proton Drive Bridge non richiede mai la password Proton. L'autenticazione è delegata al flusso ufficiale CLI/browser di Proton - le credenziali non vengono memorizzate nell'app.
+Impostazioni sicure: i download uniscono le cartelle e saltano i file esistenti; la sincronizzazione non elimina mai nulla da nessuna parte.
 
----
+## Documentazione (in inglese)
 
-> Documentazione completa in inglese: [README.md](README.md)
+- [`docs/INSTALL.md`](docs/INSTALL.md) — installazione per famiglia di distribuzione
+- [`docs/USAGE.md`](docs/USAGE.md) — accesso, trasferimenti, modalità di sincronizzazione
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — problemi comuni Linux/CLI/portachiavi
+- [`docs/SECURITY.md`](docs/SECURITY.md) — gestione delle credenziali e modello di sicurezza
 
----
+## Sostegno
 
-## Supporto
-
-Se Aux Proton Drive Bridge ti è utile, puoi [offrirmi un caffè](https://www.buymeacoffee.com/auxillo).
+Aux Proton Drive Bridge è libero e open source (MIT). Se ti è utile, puoi [offrirmi un caffè](https://www.buymeacoffee.com/auxillo) ☕

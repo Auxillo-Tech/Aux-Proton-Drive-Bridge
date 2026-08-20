@@ -4,72 +4,68 @@
 
 # Aux Proton Drive Bridge
 
-Proton の公式 `proton-drive` CLI を使用した非公式の Linux デスクトップブリッジ。
+**Linux に欠けている Proton Drive デスクトップクライアント。** Proton Drive の閲覧・アップロード・ダウンロード・同期を、一方向/双方向同期、選択同期、競合処理、転送キュー、署名付きリリースとともに提供します。Proton 公式の `proton-drive` CLI の上に構築されているため、認証情報が Proton のツール外に出ることはありません。
 
-> Not affiliated with, endorsed by, or sponsored by Proton AG.
+> 非公式のコミュニティプロジェクトです。Proton AG とは提携・承認・後援の関係にありません。
 
-## ステータス
+![ファイル画面](docs/screenshots/files-tab.png)
 
-バージョン **`0.3.6`** - 信頼性の高い同期、転送キュー、競合からの復旧、署名付き更新。
+## このプロジェクトの理由
 
-Aux Proton Drive Bridge は、Proton の公式 CLI を介して Proton Drive 操作用の GUI を Linux ユーザーに提供します。
+Proton は Linux 向け Proton Drive デスクトップクライアントを提供していません。公式 CLI が主要な処理を担いますが、ターミナル上でしか使えません。Aux Proton Drive Bridge はその CLI を完全なデスクトップアプリに包み込みます — 認証と暗号化はすべて Proton 自身のクライアントに委ねられます。
 
-## 主な機能
+## 機能
 
-- **同期メタデータ DB** - SQLite ベースで追跡対象ファイルのローカルおよびリモート状態を管理
-- **ライブ転送キュー** - 優先度、一時停止/再開、キャンセル、再試行が可能な同時転送
-- **進捗パーサー** - proton-drive CLI 出力をリアルタイム解析して転送進捗を表示
-- **競合検出と解決** - LOCAL_REMOTE_MODIFY、LOCAL_DELETE_REMOTE_MODIFY、TYPE_MISMATCH、HASH_MISMATCH を検出し解決戦略を提供
-- **双方向同期エンジン** - fs.watch によるローカルファイルシステム監視 + CLI によるリモートポーリング
-- **同期モード** - 保守的（アップロードのみ、既存ファイルはスキップ）、片方向アップロード、片方向ダウンロード、双方向
-- **自動アップデーター** - GitHub Releases ベースの更新確認とダウンロード
-- **リリース署名** - GPG および signify/minisign 署名スクリプト
-- **ファイルマネージャー統合** - Nautilus、Dolphin、Thunar のコンテキストメニュースクリプト
-- **自動復旧** - 大規模な転送を継続し、内容が同一の古い競合を安全に照合
-- **タブ付き UI** - ファイル、同期ダッシュボード、競合、キュー、更新の各タブ
+- **閲覧と転送** — `/my-files` の一覧表示、選択項目または全体のダウンロード、ファイル/フォルダーのアップロード
+- **バックグラウンド同期エンジン** — 4 つのモード:保守的(アップロードのみ・既存はスキップ)、一方向アップロード、一方向ダウンロード、完全双方向
+- **選択同期** — 除外パターンは両方向に有効:除外された項目はアップロードもダウンロードもされません
+- **競合の検出とレビュー** — 双方変更、削除対変更、型・ハッシュ不一致を安全な解決戦略付きで検出。同期が削除を伝播することはありません
+- **転送キュー** — 優先度付き並行転送、一時停止/再開、キャンセル、永続的な履歴
+- **一方向バックアッププロファイル** — 保守的セマンティクスによるフォルダーの定期バックアップ
+- **デスクトップ統合** — システムトレイ、ファイルマネージャーのコンテキストメニュー(Nautilus、Dolphin、Thunar)、GNOME Software / KDE Discover 向け AppStream メタデータ
+- **署名付きリリースとアプリ内アップデーター** — SHA-256 チェックサムを固定 Ed25519 鍵で署名
 
-## クイックインストール
+## インストール
 
-### AppImage
-ダウンロードして実行：
+最新リリース: **<https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest>**
+
+- **AppImage** — あらゆる Linux x86_64 向け。実行権限を付与して起動
+- **`.deb`** — Debian / Ubuntu / Mint / Pop!_OS 向け。`sudo apt install ./<ファイル>.deb`
+- **`.rpm`** — Fedora / RHEL / openSUSE 向け。`sudo dnf install ./<ファイル>.rpm`
+- **AUR tarball** — Arch 向け(PKGBUILD 同梱)
+
+ダウンロードの検証:
+
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
 ```
-Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
-```
-実行可能にしてファイルマネージャーまたはターミナルから起動。
 
-### Debian / Ubuntu / Mint / Pop!_OS
-ダウンロード：
-```
-Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
-```
-グラフィカルパッケージインストーラーまたは `apt`/`dpkg` でインストール。
+`SHA256SUMS.txt.sig` は `SHA256SUMS.txt` に対する Ed25519 署名です(フィンガープリント `2148f39cd1004977cfde1d0a4be7b4fa`、公開鍵は `release-manifest.json` に記載)。
 
-### Fedora / RHEL / openSUSE
-ダウンロード：
-```
-Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
-```
-グラフィカルパッケージインストーラー、`dnf`、`zypper`、または `rpm` でインストール。
+## 動作要件
 
-## システム要件
-
-- Linux x64
+- Linux x86_64
 - `proton-drive` として利用可能な Proton Drive CLI
-- Proton アカウント
-- Proton ログイン用のブラウザアクセス
-- Proton CLI がサポートする Linux シークレットストア（KWallet、GNOME Keyring/libsecret、`pass`）
+- Proton アカウントと、Proton ログイン用のブラウザー
+- CLI が対応するシークレットストア(KWallet、GNOME Keyring/libsecret、または `pass`)
 
+## クイックスタート
 
-## セキュリティモデル
+1. Proton Drive CLI をインストールし、`proton-drive version` が動くことを確認します。
+2. Aux Proton Drive Bridge を起動し **Sign in** をクリック — ログインはブラウザーで完了します。
+3. **Refresh files** をクリックし、項目を選択し、ローカルフォルダーを選んでダウンロード/アップロードします。
+4. **Sync** タブで希望のモードのバックグラウンド同期を開始します。
+5. **Conflicts** タブで検出された競合を確認します。
 
-Aux Proton Drive Bridge は Proton パスワードを決して要求しません。認証は Proton の公式 CLI/ブラウザフローに委任され、認証情報はアプリケーションに保存されません。
+安全な既定値:ダウンロードはフォルダーを統合し既存ファイルをスキップします。同期はどちら側のデータも決して削除しません。
 
----
+## ドキュメント(英語)
 
-> 完全な英語ドキュメント：[README.md](README.md)
-
----
+- [`docs/INSTALL.md`](docs/INSTALL.md) — ディストリビューション別のインストール手順
+- [`docs/USAGE.md`](docs/USAGE.md) — サインイン、転送、同期モード
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — Linux/CLI/キーリングのよくある問題
+- [`docs/SECURITY.md`](docs/SECURITY.md) — 認証情報の扱いとセキュリティモデル
 
 ## サポート
 
-Aux Proton Drive Bridge が役立つ場合は、[コーヒーを奢ってください](https://www.buymeacoffee.com/auxillo)。
+Aux Proton Drive Bridge は自由かつオープンソース(MIT)です。役に立ったら [コーヒーをおごって](https://www.buymeacoffee.com/auxillo) いただけると嬉しいです ☕

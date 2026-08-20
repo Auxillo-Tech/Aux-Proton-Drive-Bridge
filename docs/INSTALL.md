@@ -6,7 +6,7 @@ Release page:
 
 <https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest>
 
-## Supported targets for v0.3.3
+## Supported targets
 
 | Linux family | Recommended artifact | Notes |
 |---|---|---|
@@ -49,18 +49,18 @@ node scripts/release-signing.js --verify \
   --public assets/release-public-key.pem \
   --file SHA256SUMS.txt \
   --signature SHA256SUMS.txt.sig
-grep '  Aux.Proton.Drive.Bridge-0.3.3-amd64.deb$' SHA256SUMS.txt | sha256sum -c -
+grep '  Aux.Proton.Drive.Bridge-<version>-amd64.deb$' SHA256SUMS.txt | sha256sum -c -
 ```
 
-Expected v0.3.3 assets:
+Expected release assets:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
-Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
-aux-proton-drive-bridge-0.3.3-source.tar.gz
-aux-proton-drive-bridge-0.3.3-source.zip
-aux-proton-drive-bridge-0.3.3-aur.tar.gz
+Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage
+Aux.Proton.Drive.Bridge-<version>-amd64.deb
+Aux.Proton.Drive.Bridge-<version>-x86_64.rpm
+aux-proton-drive-bridge-<version>-source.tar.gz
+aux-proton-drive-bridge-<version>-source.zip
+aux-proton-drive-bridge-<version>-aur.tar.gz
 latest-linux.yml
 SHA256SUMS.txt
 SHA256SUMS.txt.sig
@@ -75,7 +75,7 @@ The application updater requires the same valid Ed25519 signature before it acce
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+Aux.Proton.Drive.Bridge-<version>-amd64.deb
 ```
 
 Option A - graphical install:
@@ -87,13 +87,13 @@ Option A - graphical install:
 Option B - terminal install:
 
 ```bash
-sudo apt install ./Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+sudo apt install ./Aux.Proton.Drive.Bridge-<version>-amd64.deb
 ```
 
 If using `dpkg` directly:
 
 ```bash
-sudo dpkg -i ./Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+sudo dpkg -i ./Aux.Proton.Drive.Bridge-<version>-amd64.deb
 sudo apt -f install
 ```
 
@@ -108,13 +108,13 @@ sudo apt remove aux-proton-drive-bridge
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+Aux.Proton.Drive.Bridge-<version>-x86_64.rpm
 ```
 
 Install:
 
 ```bash
-sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-<version>-x86_64.rpm
 ```
 
 Launch **Aux Proton Drive Bridge** from the application menu.
@@ -132,13 +132,13 @@ Download the `.rpm` asset.
 Install:
 
 ```bash
-sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-<version>-x86_64.rpm
 ```
 
 or on older systems:
 
 ```bash
-sudo yum install ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+sudo yum install ./Aux.Proton.Drive.Bridge-<version>-x86_64.rpm
 ```
 
 ## Install on openSUSE
@@ -148,29 +148,29 @@ Download the `.rpm` asset.
 Install:
 
 ```bash
-sudo zypper install ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+sudo zypper install ./Aux.Proton.Drive.Bridge-<version>-x86_64.rpm
 ```
 
 ## Install on Arch / Manjaro / EndeavourOS
 
-Use the AppImage directly, or download and extract `aux-proton-drive-bridge-0.3.3-aur.tar.gz` from the release. The archive contains the validated `PKGBUILD`, native `.SRCINFO`, and license file needed by `makepkg`.
+Use the AppImage directly, or download and extract `aux-proton-drive-bridge-<version>-aur.tar.gz` from the release. The archive contains the validated `PKGBUILD`, native `.SRCINFO`, and license file needed by `makepkg`.
 
 Download:
 
 ```text
-Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage
 ```
 
 Make it executable:
 
 ```bash
-chmod +x ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+chmod +x ./Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage
 ```
 
 Run:
 
 ```bash
-./Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage
 ```
 
 AUR metadata is validated in an Arch container for each release. Publishing it to the AUR is a separate maintainer action.
@@ -190,8 +190,8 @@ For the AppImage, pass the same flag to its saved AppImage path. This installs u
 Use the AppImage.
 
 ```bash
-chmod +x ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
-./Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+chmod +x ./Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage
 ```
 
 If AppImage does not launch because FUSE is missing, see [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
@@ -265,6 +265,6 @@ You can also use the **Updates** tab in the app to check for and download new ve
 
 ## Current packaging limitations
 
-- v0.3.3 is x64 only.
+- v<version> is x64 only.
 - Flatpak is not shipped because Proton Drive CLI 0.6.0 has no authoritative immutable Flatpak source or offline sandbox build path.
 - Wider distro qualification is still pending.

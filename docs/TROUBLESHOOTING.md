@@ -114,7 +114,7 @@ Options:
 Try installing with dependency resolution:
 
 ```bash
-sudo apt install ./Aux.Proton.Drive.Bridge-0.3.3-amd64.deb
+sudo apt install ./Aux.Proton.Drive.Bridge-<version>-amd64.deb
 ```
 
 If you used `dpkg` and dependencies failed:
@@ -128,13 +128,13 @@ sudo apt -f install
 Fedora/RHEL-family:
 
 ```bash
-sudo dnf install ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+sudo dnf install ./Aux.Proton.Drive.Bridge-<version>-x86_64.rpm
 ```
 
 openSUSE:
 
 ```bash
-sudo zypper install ./Aux.Proton.Drive.Bridge-0.3.3-x86_64.rpm
+sudo zypper install ./Aux.Proton.Drive.Bridge-<version>-x86_64.rpm
 ```
 
 ## White screen or app window opens blank
@@ -150,7 +150,7 @@ npm start
 If using AppImage:
 
 ```bash
-./Aux.Proton.Drive.Bridge-0.3.3-x86_64.AppImage
+./Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage
 ```
 
 ## Files downloaded to the wrong folder

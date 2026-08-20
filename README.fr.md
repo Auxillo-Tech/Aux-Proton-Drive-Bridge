@@ -4,72 +4,68 @@
 
 # Aux Proton Drive Bridge
 
-Pont de bureau Linux non officiel pour Proton Drive utilisant la CLI officielle `proton-drive` de Proton.
+**Le client de bureau Proton Drive qui manque à Linux.** Parcourez, téléversez, téléchargez et synchronisez votre Proton Drive — avec synchronisation unidirectionnelle et bidirectionnelle, synchronisation sélective, gestion des conflits, file de transferts et versions signées. Construit sur le CLI officiel `proton-drive` de Proton : vos identifiants ne quittent jamais les outils de Proton.
 
-> Not affiliated with, endorsed by, or sponsored by Proton AG.
+> Projet communautaire non officiel. Sans affiliation, approbation ni parrainage de Proton AG.
 
-## Statut
+![Vue des fichiers](docs/screenshots/files-tab.png)
 
-Version **`0.3.6`** - Synchronisation fiable, file d'attente de transfert, récupération des conflits et mises à jour signées.
+## Pourquoi ce projet
 
-Aux Proton Drive Bridge offre aux utilisateurs Linux une interface graphique pour les opérations Proton Drive via la CLI officielle de Proton.
+Proton ne propose pas de client de bureau Proton Drive pour Linux. Son CLI officiel fait le gros du travail, mais vit dans un terminal. Aux Proton Drive Bridge enveloppe ce CLI dans une véritable application de bureau — l'authentification et le chiffrement restent entièrement dans le client de Proton.
 
-## Fonctionnalités principales
+## Fonctionnalités
 
-- **Base de données de métadonnées de synchronisation** - Suivi SQLite de l'état local et distant de chaque fichier suivi
-- **File d'attente de transfert en direct** - Transferts simultanés avec priorité, pause/reprise, annulation, nouvelle tentative
-- **Analyseur de progression** - Analyse en temps réel de la sortie CLI de proton-drive pour la progression des transferts
-- **Détection et résolution de conflits** - Détecte LOCAL_REMOTE_MODIFY, LOCAL_DELETE_REMOTE_MODIFY, TYPE_MISMATCH, HASH_MISMATCH avec stratégies de résolution
-- **Moteur de synchronisation bidirectionnelle** - Surveillance du système de fichiers local via fs.watch + interrogation à distance via CLI
-- **Modes de synchronisation** - Conservateur (upload uniquement, ignorer existants), Upload unidirectionnel, Download unidirectionnel, Bidirectionnel
-- **Mise à jour automatique** - Vérification et téléchargement des mises à jour basés sur GitHub Releases
-- **Signature des versions** - Scripts de signature GPG et signify/minisign
-- **Intégration gestionnaire de fichiers** - Scripts de menu contextuel pour Nautilus, Dolphin, Thunar
-- **Récupération automatique** - Reprendre les transferts volumineux et réconcilier les anciens conflits identiques
-- **Interface à onglets** - Onglets séparés pour Fichiers, Tableau de bord Sync, Conflits, File d'attente et Mises à jour
+- **Parcourir et transférer** — lister `/my-files`, télécharger la sélection ou tout, téléverser fichiers et dossiers
+- **Moteur de synchronisation en arrière-plan** — quatre modes : conservateur (téléversement seul, ignore l'existant), unidirectionnel montant, unidirectionnel descendant, bidirectionnel complet
+- **Synchronisation sélective** — les motifs d'exclusion agissent dans les deux sens : les éléments exclus ne sont ni téléversés ni téléchargés
+- **Détection et examen des conflits** — modifications des deux côtés, suppression contre modification, conflits de type et de hachage, avec des stratégies sûres ; la synchronisation ne propage jamais les suppressions
+- **File de transferts** — transferts concurrents avec priorité, pause/reprise, annulation et historique persistant
+- **Profils de sauvegarde unidirectionnelle** — sauvegardes planifiées de dossiers à sémantique conservatrice
+- **Intégration au bureau** — zone de notification, menus contextuels des gestionnaires de fichiers (Nautilus, Dolphin, Thunar), métadonnées AppStream pour GNOME Logiciels / KDE Discover
+- **Versions signées et mise à jour intégrée** — sommes SHA-256 signées avec une clé Ed25519 épinglée
 
-## Installation rapide
+## Installation
 
-### AppImage
-Télécharger et exécuter :
+Dernière version : **<https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/latest>**
+
+- **AppImage** pour tout Linux x86_64 — rendre exécutable et lancer
+- **`.deb`** pour Debian / Ubuntu / Mint / Pop!_OS — `sudo apt install ./<fichier>.deb`
+- **`.rpm`** pour Fedora / RHEL / openSUSE — `sudo dnf install ./<fichier>.rpm`
+- **Archive AUR** pour Arch (PKGBUILD inclus)
+
+Vérifiez votre téléchargement :
+
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
 ```
-Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage
-```
-Rendre exécutable et lancer depuis le gestionnaire de fichiers ou le terminal.
 
-### Debian / Ubuntu / Mint / Pop!_OS
-Télécharger :
-```
-Aux.Proton.Drive.Bridge-0.3.6-amd64.deb
-```
-Installer avec l'installateur graphique ou avec `apt`/`dpkg`.
+`SHA256SUMS.txt.sig` est une signature Ed25519 de `SHA256SUMS.txt` (empreinte `2148f39cd1004977cfde1d0a4be7b4fa`, clé publique dans `release-manifest.json`).
 
-### Fedora / RHEL / openSUSE
-Télécharger :
-```
-Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm
-```
-Installer avec l'installateur graphique, `dnf`, `zypper` ou `rpm`.
+## Prérequis
 
-## Configuration requise
+- Linux x86_64
+- Proton Drive CLI disponible sous le nom `proton-drive`
+- Un compte Proton et un navigateur pour la connexion Proton
+- Un coffre à secrets pris en charge par le CLI (KWallet, GNOME Keyring/libsecret ou `pass`)
 
-- Linux x64
-- Proton Drive CLI disponible en tant que `proton-drive`
-- Un compte Proton
-- Accès au navigateur pour la connexion Proton
-- Stockage de secrets Linux pris en charge par Proton CLI (KWallet, GNOME Keyring/libsecret ou `pass`)
+## Démarrage rapide
 
+1. Installez le Proton Drive CLI et vérifiez que `proton-drive version` fonctionne.
+2. Lancez Aux Proton Drive Bridge et cliquez sur **Sign in** — la connexion se termine dans le navigateur.
+3. Cliquez sur **Refresh files**, sélectionnez des éléments, choisissez un dossier local, téléchargez ou téléversez.
+4. Ouvrez l'onglet **Sync** pour démarrer la synchronisation dans le mode voulu.
+5. Examinez ce qui est signalé dans l'onglet **Conflicts**.
 
-## Modèle de sécurité
+Valeurs par défaut sûres : les téléchargements fusionnent les dossiers et ignorent les fichiers existants ; la synchronisation ne supprime jamais rien d'aucun côté.
 
-Aux Proton Drive Bridge ne demande jamais votre mot de passe Proton. L'authentification est déléguée au flux officiel CLI/navigateur de Proton - les identifiants ne sont pas stockés dans l'application.
+## Documentation (en anglais)
 
----
-
-> Documentation complète en anglais : [README.md](README.md)
-
----
+- [`docs/INSTALL.md`](docs/INSTALL.md) — installation par famille de distribution
+- [`docs/USAGE.md`](docs/USAGE.md) — connexion, transferts, modes de synchronisation
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — problèmes courants Linux/CLI/trousseau
+- [`docs/SECURITY.md`](docs/SECURITY.md) — gestion des identifiants et modèle de sécurité
 
 ## Soutien
 
-Si Aux Proton Drive Bridge vous aide, vous pouvez [m'offrir un café](https://www.buymeacoffee.com/auxillo).
+Aux Proton Drive Bridge est libre et open source (MIT). S'il vous est utile, vous pouvez [m'offrir un café](https://www.buymeacoffee.com/auxillo) ☕

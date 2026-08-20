@@ -1,27 +1,29 @@
 # Release status
 
-Status: **v0.3.6 local release candidate** - Reliable sync, transfer queue, conflict recovery, signed updates, and Linux package targets.
+Status: **v0.3.7** - Reliable shutdown, sync correctness, transfer queue, conflict recovery, signed updates, and Linux package targets.
 
-Version: 0.3.6
-Publication: not yet published; the current public release remains v0.3.5
-Planned release page: <https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/tag/v0.3.6>
+Version: 0.3.7
+Release page: <https://github.com/Auxillo-Tech/Aux-Proton-Drive-Bridge/releases/tag/v0.3.7>
 
 ## Release gates
 
-A v0.3.6 release is valid only when all of these commands pass from one clean Git revision:
+A release is valid only when all of these pass from one clean Git revision:
 
-- Source tests/static checks: pending final v0.3.6 verification
-- Dependency audit: `npm audit --json` - 0 vulnerabilities
-- Source and installed-package results are recorded only after the final matrix completes
+- Source tests/static checks: `npm run check` (unit suite + static checks)
+- Dependency audit: `npm audit` - 0 vulnerabilities
+- Smokes: `smoke:modules`, `smoke:source`, `smoke:appimage`
+- E2E: `e2e:source`, `e2e:restart`, `e2e:packaged`, `e2e:live-installed`, `e2e:ui` (full renderer walk incl. all four sync modes in both directions, live)
+- Disposable installed-package tests (`test:installed`) and AUR container validation (`test:aur`)
+- Signed checksum set verified with the pinned Ed25519 key (`release:sign:verify`)
 
 ## Release assets
 
-- `Aux.Proton.Drive.Bridge-0.3.6-x86_64.AppImage`
-- `Aux.Proton.Drive.Bridge-0.3.6-amd64.deb`
-- `Aux.Proton.Drive.Bridge-0.3.6-x86_64.rpm`
-- `aux-proton-drive-bridge-0.3.6-source.tar.gz`
-- `aux-proton-drive-bridge-0.3.6-source.zip`
-- `aux-proton-drive-bridge-0.3.6-aur.tar.gz`
+- `Aux.Proton.Drive.Bridge-<version>-x86_64.AppImage`
+- `Aux.Proton.Drive.Bridge-<version>-amd64.deb`
+- `Aux.Proton.Drive.Bridge-<version>-x86_64.rpm`
+- `aux-proton-drive-bridge-<version>-source.tar.gz`
+- `aux-proton-drive-bridge-<version>-source.zip`
+- `aux-proton-drive-bridge-<version>-aur.tar.gz`
 - `latest-linux.yml`
 - `sbom.cdx.json`
 - `release-manifest.json`
@@ -39,9 +41,13 @@ The checksum manifest must have a valid Ed25519 signature from the public key in
 | Persistent SQLite sync metadata | Implemented |
 | Transfer queue and retry handling | Implemented |
 | No-delete bidirectional sync | Implemented |
+| Selective sync excludes fencing both directions | Implemented (0.3.7) |
+| Reliable quit / SIGTERM shutdown on Linux | Implemented (0.3.7) |
+| Single-instance command deduplication | Implemented (0.3.7) |
 | Conflict persistence and deferred resolution | Implemented |
 | Signed GitHub release updater | Implemented |
 | File manager integration | Implemented |
+| AppStream metadata in deb/rpm | Implemented (0.3.7) |
 | Automatic recovery for large transfer batches and legacy false conflicts | Implemented |
 | AMD Navi 48 startup compatibility | Automatic software-rendering fallback |
 | AppImage, DEB, and RPM | Supported release targets |
