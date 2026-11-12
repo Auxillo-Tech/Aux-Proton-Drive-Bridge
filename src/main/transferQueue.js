@@ -53,6 +53,9 @@ function createTransferQueue(options = {}) {
   const COMPLETED_MAX = 100;
   const idleWaiters = new Set();
 
+  /** Named checks run just before every CLI attempt (see registerPreflight). */
+  const preflights = new Map();
+
   let isPaused = false;
   let nextId = 1;
 
@@ -152,6 +155,9 @@ function createTransferQueue(options = {}) {
         if (err.cancelled || err.name === 'AbortError') throw err;
 
         lastError = err;
+        // A refused preflight is a decision about the source, not a transient fault: retrying
+        // the same attempt could only wait for the source to change again.
+        if (err.preflightRefused) break;
         if (err.message && (
           err.message.includes('ENOENT') ||
           err.message.includes('EACCES') ||
@@ -168,8 +174,38 @@ function createTransferQueue(options = {}) {
     throw lastError || new Error('Transfer failed after retries');
   }
 
+  /**
+   * Runs the check named by the plain-data flag `options.preflight`, inside the Proton process
+   * lock and right before the CLI is spawned, so it sees the source as the CLI is about to see
+   * it. A refused attempt never starts the CLI. A flag naming no registered check is refused too.
+   */
+  async function runPreflight(item) {
+    const name = item.options?.preflight;
+    if (!name) return;
+    const check = preflights.get(name);
+    let reason;
+    try {
+      reason = check ? await check(Object.freeze({ ...item.options })) : 'no check registered';
+    } catch (err) {
+      reason = `check failed: ${err.message}`;
+    }
+    if (reason) {
+      throw Object.assign(
+        new Error(`Upload not started: the source changed after it was queued (${reason})`),
+        { preflightRefused: true }
+      );
+    }
+  }
+
   function runTransferOnce(item, signal) {
-    return withProtonProcessLock(() => new Promise((resolve, reject) => {
+    return withProtonProcessLock(async () => {
+      await runPreflight(item);
+      return spawnTransfer(item, signal);
+    }, signal);
+  }
+
+  function spawnTransfer(item, signal) {
+    return new Promise((resolve, reject) => {
       const { bin, args } = buildCommand(item.action, item.options, protonBin);
       const env = buildChildEnv({ PROTON_DRIVE_LOG_LEVEL: item.options.logLevel || 'ERROR' });
 
@@ -289,7 +325,7 @@ function createTransferQueue(options = {}) {
       if (signal && typeof signal.addEventListener === 'function') {
         signal.addEventListener('abort', cleanupChild, { once: true });
       }
-    }), signal);
+    });
   }
 
   // ── Public API ─────────────────────────────────────────────
@@ -395,6 +431,20 @@ function createTransferQueue(options = {}) {
     };
   }
 
+  /**
+   * Register a check for transfers whose options carry `preflight: <name>`. The check receives a
+   * frozen copy of the options and returns a falsy value to go ahead or a short reason to refuse.
+   * Only a plain name travels in the options, never a function: options reach the renderer and
+   * the operation store. Returns a function that removes the check again.
+   */
+  function registerPreflight(name, check) {
+    if (typeof name !== 'string' || !name || typeof check !== 'function') {
+      throw new TypeError('registerPreflight needs a name and a function');
+    }
+    preflights.set(name, check);
+    return () => { if (preflights.get(name) === check) preflights.delete(name); };
+  }
+
   function on(event, handler) {
     emitter.on(event, handler);
     return () => emitter.off(event, handler);
@@ -406,7 +456,7 @@ function createTransferQueue(options = {}) {
     emitter.removeAllListeners();
   }
 
-  return { enqueue, cancel, cancelAll, pause, resume, getState, waitForIdle, waitForSettled, on, destroy, emitter };
+  return { enqueue, cancel, cancelAll, pause, resume, getState, waitForIdle, waitForSettled, registerPreflight, on, destroy, emitter };
 }
 
 module.exports = { createTransferQueue, MAX_RETRIES, MAX_QUEUE_DEPTH };

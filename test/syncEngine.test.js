@@ -1723,7 +1723,8 @@ describe('syncEngine - end-to-end state orchestration', () => {
     engine.setMode(SYNC_MODES.CONSERVATIVE);
     await engine.syncPending();
     const upload = queue.items[0];
-    assert.deepStrictEqual(upload.options.localPaths, [folder]);
+    // This fake queue cannot re-check the folder right before the CLI runs, so a stand-in goes up.
+    assert.deepStrictEqual(upload.options.trackedLocalPaths ?? upload.options.localPaths, [folder]);
     queue.emit('error', { id: upload.id, action: 'upload', options: upload.options, error: 'network timeout' });
     assert.strictEqual(db.getTrackedFileByPath('/my-files/F').sync_state, 'pending_upload');
     assert.strictEqual(db.getTrackedFileByPath('/my-files/F/x.txt').sync_state, 'remote_modified');

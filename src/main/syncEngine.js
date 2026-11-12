@@ -1,5 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const crypto = require('node:crypto');
 const { DEFAULT_LOCAL_FOLDER, getStatus, normalizeRemotePath, parseListOutputAsync, runProton } = require('./protonCli');
 const { assertSafePathInside, isPathInside } = require('./pathSafety');
@@ -41,6 +42,11 @@ const MAX_LOCAL_ITEMS = 100_000;
 const MAX_REMOTE_ITEMS = 100_000;
 const MAX_REMOTE_DEPTH = 100;
 const SCAN_YIELD_EVERY = 25;
+/** A folder is only handed to the CLI whole when nothing inside it changed this recently. */
+const DEFAULT_FOLDER_SETTLE_MS = 5000;
+/** Plain-data flags in transfer options naming the check the queue runs before every CLI attempt. */
+const PREFLIGHT_FOLDER_UPLOAD = 'sync-folder-upload';
+const PREFLIGHT_FILE_UPLOAD = 'sync-file-upload';
 
 function yieldToEventLoop() {
   return new Promise(resolve => setImmediate(resolve));
@@ -55,6 +61,8 @@ function createSyncEngine(options = {}) {
   const customListParser = options.parseListOutput || null;
   const remoteListRetryDelayMs = Number.isFinite(Number(options.remoteListRetryDelayMs))
     ? Math.max(0, Number(options.remoteListRetryDelayMs)) : 750;
+  const folderSettleMs = Number.isFinite(Number(options.folderSettleMs))
+    ? Math.max(0, Number(options.folderSettleMs)) : DEFAULT_FOLDER_SETTLE_MS;
   const defaultLocalFolder = path.resolve(options.localFolder || DEFAULT_LOCAL_FOLDER);
   if (!syncDb) throw new Error('syncDb is required');
 
@@ -74,7 +82,10 @@ function createSyncEngine(options = {}) {
   let ignoreMatchers = compileIgnorePatterns(options.ignorePatterns);
   const pendingResolutions = new Map();
   const pendingUploadResolutions = new Map();
+  /** Transfer id -> temporary directory holding an empty stand-in for an upload folder. */
+  const stagedFolderRoots = new Map();
   const syncTransferIds = new Set();
+  const canPreflightUploads = typeof transferQueue?.registerPreflight === 'function';
   /** Latest in-flight upload transfer id per remote path (stale completes must not verify). */
   const activeUploadTransferByPath = new Map();
   const debounceTimers = new Map();
@@ -499,7 +510,9 @@ function createSyncEngine(options = {}) {
         throwIfCancelled(expectedGeneration, 'Local scan cancelled');
       }
       if (!tracked.local_path || tracked.remote_path === '__checkpoint__' || !isPathInside(tracked.local_path, activeFolder)) continue;
-      if (!seen.has(tracked.remote_path) && !fs.existsSync(tracked.local_path)) {
+      // lstat, not existsSync: a path that became a symlink is not "gone", and a dangling or
+      // swapped link must never be read through.
+      if (!seen.has(tracked.remote_path) && !pathExistsNoFollow(tracked.local_path)) {
         trackLocalPath(tracked.local_path, path.relative(activeFolder, tracked.local_path), 'scan-delete');
       }
     }
@@ -1272,6 +1285,107 @@ function createSyncEngine(options = {}) {
     return [SYNC_MODES.ONE_WAY_DOWNLOAD, SYNC_MODES.BIDIRECTIONAL].includes(mode);
   }
 
+  function pathExistsNoFollow(fullPath) {
+    try { fs.lstatSync(fullPath); return true; } catch { return false; }
+  }
+
+  /**
+   * Why a row's local path must not be uploaded right now, or null when it may be. The path is
+   * checked without following links: a symlink, a type that no longer matches the row and a
+   * symlinked parent (which would make the CLI read outside the sync folder) are all refused.
+   * 'missing' means the item is gone, which is not a safety problem.
+   */
+  function uploadSourceProblem(localPath, expectedType) {
+    let stat;
+    try { stat = fs.lstatSync(localPath); } catch { return 'missing'; }
+    if (stat.isSymbolicLink()) return 'symlink';
+    if (!isPathInside(localPath, activeFolder)) return 'outside_sync_folder';
+    if (expectedType === 'folder' ? !stat.isDirectory() : expectedType === 'file' ? !stat.isFile() : !(stat.isFile() || stat.isDirectory())) {
+      return 'type_changed';
+    }
+    try {
+      const parent = path.dirname(localPath);
+      const expectedParent = path.join(fs.realpathSync(activeFolder), path.relative(activeFolder, parent));
+      if (fs.realpathSync(parent) !== expectedParent) return 'symlinked_parent';
+    } catch { return 'unreadable_parent'; }
+    return null;
+  }
+
+  /**
+   * True when the folder holds nothing the sync rules keep out: no excluded name, no dotfile,
+   * no symlink and no special file anywhere inside, the folder itself is a real directory, and
+   * nothing inside it changed within the settle window (a copy or clone may still be running).
+   * Only then may the folder go to the CLI as a whole. An unreadable folder or one too large to
+   * inspect counts as not clean, so the answer fails towards uploading less.
+   */
+  async function folderIsCleanForUpload(folderPath) {
+    const now = Date.now();
+    const cutoff = now - folderSettleMs;
+    // ctime cannot be set by the writer, so it is the real "changed" clock. mtime is checked too,
+    // except when it lies further ahead than the window (archives with bad dates).
+    const changedRecently = stat => folderSettleMs > 0 &&
+      (stat.ctimeMs > cutoff || (stat.mtimeMs > cutoff && stat.mtimeMs <= now + folderSettleMs));
+    try {
+      const rootStat = await fs.promises.lstat(folderPath);
+      if (rootStat.isSymbolicLink() || !rootStat.isDirectory() || changedRecently(rootStat)) return false;
+    } catch { return false; }
+    const stack = [folderPath];
+    let inspected = 0;
+    while (stack.length) {
+      const current = stack.pop();
+      let entries;
+      try { entries = await fs.promises.readdir(current, { withFileTypes: true }); }
+      catch { return false; }
+      for (const entry of entries) {
+        if (++inspected > MAX_LOCAL_ITEMS) return false;
+        if (inspected % SCAN_YIELD_EVERY === 0) await yieldToEventLoop();
+        const fullPath = path.join(current, entry.name);
+        if (shouldIgnore(path.relative(activeFolder, fullPath))) return false;
+        if (entry.isSymbolicLink()) return false;
+        if (!entry.isDirectory() && !entry.isFile()) return false;
+        if (folderSettleMs > 0) {
+          try { if (changedRecently(await fs.promises.lstat(fullPath))) return false; } catch { return false; }
+        }
+        if (entry.isDirectory()) stack.push(fullPath);
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Runs inside the transfer queue's process lock right before every CLI attempt for a
+   * whole-folder or single-file upload that came from sync. The decision taken when the row was
+   * queued may be minutes old (queue backlog, retry after an error): re-check it now. A refusal
+   * fails the attempt without calling the CLI; the row goes back to pending_upload and the
+   * next cycle decides again (stand-in folder, ignore, or delete).
+   */
+  async function checkUploadSource(transferOptions) {
+    const kind = transferOptions.preflight === PREFLIGHT_FOLDER_UPLOAD ? 'folder' : 'file';
+    const paths = transferOptions.localPaths;
+    if (!Array.isArray(paths) || paths.length !== 1) return 'unexpected transfer options';
+    const target = paths[0];
+    const problem = uploadSourceProblem(target, kind);
+    if (problem) return problem;
+    if (shouldIgnore(path.relative(activeFolder, target))) return 'excluded';
+    if (kind === 'folder' && !(await folderIsCleanForUpload(target))) return 'folder is no longer clean';
+    return null;
+  }
+
+  /** Empty stand-in folder that makes the CLI create the remote folder without its contents. */
+  function stageEmptyFolder(folderPath) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aux-bridge-folder-'));
+    const staged = path.join(root, path.basename(folderPath));
+    fs.mkdirSync(staged);
+    return { root, staged };
+  }
+
+  function removeStagedFolder(transferId) {
+    const root = stagedFolderRoots.get(transferId);
+    if (!root) return;
+    stagedFolderRoots.delete(transferId);
+    try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
+  }
+
   async function syncPending() {
     if (!transferQueue) return { queued: 0, remaining: syncDb.listFilesNeedingSync(MAX_BATCH_SIZE).length };
     // The CLI has no safe cross-platform remote-delete primitive. Preserve data by restoring
@@ -1280,7 +1394,7 @@ function createSyncEngine(options = {}) {
       syncDb.setSyncState(item.remote_path, canDownload() ? 'pending_download' : 'ignored');
     }
     for (const item of syncDb.listTrackedFiles('remote_deleted')) {
-      const canRestoreRemote = canUpload() && item.local_path && fs.existsSync(item.local_path);
+      const canRestoreRemote = canUpload() && item.local_path && pathExistsNoFollow(item.local_path);
       syncDb.setSyncState(item.remote_path, canRestoreRemote ? 'pending_upload' : 'ignored');
     }
     const actionableStates = [
@@ -1311,20 +1425,56 @@ function createSyncEngine(options = {}) {
       }
       if (canUpload() && ['local_new', 'local_modified', 'pending_upload'].includes(item.sync_state)) {
         if (hasQueuedAncestor(item.remote_path, uploadFolderPaths)) continue;
-        if (!item.local_path || !fs.existsSync(item.local_path)) {
+        // lstat before every enqueue: a row whose path became a symlink (or a different kind of
+        // item, or sits under a symlinked parent) would make the CLI read outside the sync
+        // folder. Such a row is parked as ignored and logged; it is picked up again when a scan
+        // sees a real item at the path with different metadata.
+        const sourceProblem = item.local_path ? uploadSourceProblem(item.local_path, item.type) : 'missing';
+        if (sourceProblem === 'missing') {
           syncDb.setSyncState(item.remote_path, 'local_deleted');
+          continue;
+        }
+        if (sourceProblem) {
+          syncDb.setSyncState(item.remote_path, 'ignored');
+          syncDb.logEvent({
+            fileId: item.id, eventType: 'upload_error', severity: 'warn',
+            detail: { path: item.local_path, reason: `upload_refused_${sourceProblem}` }
+          });
+          emit('info', { message: `Not uploading ${item.local_path}: ${sourceProblem.replace(/_/g, ' ')}` });
           continue;
         }
         try {
           const intentLocalHash = item.local_hash || null;
           const previousTransferId = activeUploadTransferByPath.get(item.remote_path);
-          const transferId = transferQueue.enqueue('upload', {
-            localPaths: [item.local_path],
-            parentPath: path.posix.dirname(item.remote_path),
-            fileConflictStrategy: mode === SYNC_MODES.CONSERVATIVE ? 'skip' : 'replace',
-            folderConflictStrategy: 'merge',
-            logLevel: 'ERROR'
-          }, 'medium');
+          // The CLI uploads a folder with everything in it, so a folder is only handed over whole
+          // when nothing inside is excluded. Otherwise only an empty stand-in goes up to create the
+          // remote folder; the files and folders inside it have their own rows (excluded ones have
+          // none) and follow in the next batch, each decided on its own.
+          let uploadPath = item.local_path;
+          let staged = null;
+          // Without a queue that can re-check the folder right before the CLI runs, a whole-folder
+          // upload cannot be made safe, so the stand-in is used.
+          if (item.type === 'folder' && (!canPreflightUploads || !(await folderIsCleanForUpload(item.local_path)))) {
+            staged = stageEmptyFolder(item.local_path);
+            uploadPath = staged.staged;
+          }
+          let transferId;
+          try {
+            transferId = transferQueue.enqueue('upload', {
+              localPaths: [uploadPath],
+              ...(staged ? { trackedLocalPaths: [item.local_path] } : {}),
+              ...(!staged && canPreflightUploads
+                ? { preflight: item.type === 'folder' ? PREFLIGHT_FOLDER_UPLOAD : PREFLIGHT_FILE_UPLOAD } : {}),
+              parentPath: path.posix.dirname(item.remote_path),
+              fileConflictStrategy: mode === SYNC_MODES.CONSERVATIVE ? 'skip' : 'replace',
+              folderConflictStrategy: 'merge',
+              logLevel: 'ERROR'
+            }, 'medium');
+          } catch (error) {
+            if (staged) { try { fs.rmSync(staged.root, { recursive: true, force: true }); } catch {} }
+            throw error;
+          }
+          if (staged) stagedFolderRoots.set(transferId, staged.root);
           if (previousTransferId && previousTransferId !== transferId) {
             try { transferQueue.cancel?.(previousTransferId); } catch {}
             syncTransferIds.delete(previousTransferId);
@@ -1459,11 +1609,19 @@ function createSyncEngine(options = {}) {
   function setupQueueListeners() {
     if (!transferQueue?.on) return;
     if (queueRemoveHandlers.length) return;
+    if (canPreflightUploads) {
+      queueRemoveHandlers.push(transferQueue.registerPreflight(PREFLIGHT_FOLDER_UPLOAD, checkUploadSource));
+      queueRemoveHandlers.push(transferQueue.registerPreflight(PREFLIGHT_FILE_UPLOAD, checkUploadSource));
+    }
+    // The empty stand-in for an upload folder is only needed while its transfer is in flight.
+    for (const event of ['complete', 'error', 'cancelled', 'skipped']) {
+      queueRemoveHandlers.push(transferQueue.on(event, payload => removeStagedFolder(payload.id)));
+    }
     queueRemoveHandlers.push(transferQueue.on('complete', payload => {
       if (!syncTransferIds.delete(payload.id)) return;
       const completedUploadPaths = [];
       const verificationJobs = [];
-      for (const localPath of payload.options?.localPaths || []) {
+      for (const localPath of payload.options?.trackedLocalPaths || payload.options?.localPaths || []) {
         for (const item of syncDb.listTrackedFilesByLocalPath(localPath)) {
           // Snapshot upload intent before refresh so a quiet post-transfer edit cannot bind
           // verification to the wrong local bytes.
@@ -1605,7 +1763,7 @@ function createSyncEngine(options = {}) {
       // Only the row this transfer was queued for is put back, and only if the transfer is
       // what moved it into its in-flight state. Descendants of a folder transfer and rows
       // that meanwhile hold a conflict or a local/remote change keep their state.
-      for (const localPath of payload.options?.localPaths || []) {
+      for (const localPath of payload.options?.trackedLocalPaths || payload.options?.localPaths || []) {
         for (const item of syncDb.listTrackedFilesByLocalPath(localPath)) {
           if (item.sync_state === 'uploading') syncDb.setSyncState(item.remote_path, 'pending_upload');
           syncDb.logEvent({ fileId: item.id, eventType: 'upload_error', detail: { error: payload.error }, severity: 'error' });
@@ -1634,7 +1792,7 @@ function createSyncEngine(options = {}) {
     queueRemoveHandlers.push(transferQueue.on('skipped', payload => {
       const summary = payload.result?.summary || {};
       if (!restoreFailedTransfer({ ...payload, error: `Proton Drive skipped ${summary.totalSkipped || 1} item(s)` })) return;
-      for (const localPath of payload.options?.localPaths || []) {
+      for (const localPath of payload.options?.trackedLocalPaths || payload.options?.localPaths || []) {
         const item = syncDb.listTrackedFilesByLocalPath(localPath)[0];
         if (item) conflictStore?.recordTransferSkipped({ remotePath: item.remote_path, localPath: item.local_path, action: payload.action, summary, type: item.type });
       }
@@ -1756,6 +1914,7 @@ function createSyncEngine(options = {}) {
         try { await transferQueue.waitForSettled(stoppingTransfers); } catch (error) { emit('error', { source: 'stop', message: error.message }); }
       }
       syncTransferIds.clear();
+      for (const id of [...stagedFolderRoots.keys()]) removeStagedFolder(id);
       if (activeCyclePromise) {
         try { await activeCyclePromise; } catch {}
       }
