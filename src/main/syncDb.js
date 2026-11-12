@@ -144,10 +144,15 @@ function createSyncDb(dbPath) {
       : stmt('SELECT * FROM tracked_files ORDER BY remote_path').all();
   }
 
-  function listFilesNeedingSync(limit = 50) {
+  function listFilesNeedingSync(limit = 50, states = null) {
+    // A caller that can only act on some pending states passes them, so rows it cannot
+    // act on do not fill the batch and starve the rows it can.
+    const pendingStates = ['pending_download', 'pending_upload', 'local_new', 'remote_new', 'local_modified', 'remote_modified'];
+    const wanted = Array.isArray(states) ? pendingStates.filter(state => states.includes(state)) : pendingStates;
+    if (!wanted.length) return [];
     return stmt(`SELECT * FROM tracked_files
-      WHERE sync_state IN ('pending_download','pending_upload','local_new','remote_new','local_modified','remote_modified')
-      ORDER BY sync_version ASC LIMIT ?`).all(safeLimit(limit));
+      WHERE sync_state IN (${wanted.map(() => '?').join(',')})
+      ORDER BY sync_version ASC LIMIT ?`).all(...wanted, safeLimit(limit));
   }
 
   function getStaleItemsByState(state, cutoff) {

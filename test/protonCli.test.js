@@ -1,10 +1,35 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildCommand, parseListOutput, parseListOutputAsync, normalizeRemotePath } = require('../src/main/protonCli');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { buildCommand, parseListOutput, parseListOutputAsync, normalizeRemotePath, runProton } = require('../src/main/protonCli');
+
+// Runs `fn` with PROTON_DRIVE_BIN pointing at a throwaway Node script that stands in for the CLI.
+async function withFakeCli(source, fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-proton-cli-'));
+  const bin = path.join(dir, 'proton-drive');
+  fs.writeFileSync(bin, `#!${process.execPath}\n${source}\n`, { mode: 0o755 });
+  const previous = process.env.PROTON_DRIVE_BIN;
+  process.env.PROTON_DRIVE_BIN = bin;
+  try {
+    return await fn();
+  } finally {
+    if (previous === undefined) delete process.env.PROTON_DRIVE_BIN;
+    else process.env.PROTON_DRIVE_BIN = previous;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 test('normalizeRemotePath builds safe Proton POSIX paths', () => {
   assert.equal(normalizeRemotePath('/my-files', '1. Misc'), '/my-files/1. Misc');
   assert.equal(normalizeRemotePath('/my-files/', 'foo/bar'), '/my-files/foo\/bar');
+});
+
+test('normalizeRemotePath joins the name as given, without rewriting it', () => {
+  assert.equal(normalizeRemotePath('/my-files/Docs', 'a b (1).txt'), '/my-files/Docs/a b (1).txt');
+  assert.equal(normalizeRemotePath('/my-files', 'back\\slash.txt'), '/my-files/back\\slash.txt');
+  assert.equal(normalizeRemotePath('', 'x'), '/my-files/x');
 });
 
 test('buildCommand returns argv without shell interpolation', () => {
@@ -122,6 +147,15 @@ test('parseListOutput maps live totalStorageSize and undecryptable-name UID fiel
   assert.strictEqual(rows[0].size, 987);
 });
 
+test('parseListOutput marks rows whose name could not be read', () => {
+  const rows = parseListOutput(JSON.stringify([
+    { uid: 'NODE-123', type: 'file', name: { ok: false, error: 'undecryptable' } },
+    { uid: 'NODE-456', type: 'file', name: { ok: true, value: 'readable.txt' } }
+  ]), { requireJson: true });
+  assert.strictEqual(rows[0].nameUnavailable, true);
+  assert.strictEqual('nameUnavailable' in rows[1], false);
+});
+
 test('extractLoginUrl finds Proton desktop login links', () => {
   const { extractLoginUrl, isAlreadyLoggedOutMessage } = require('../src/main/protonCli');
   const text = 'Open following URL manually if browser did not open automatically:\nhttps://account.proton.me/desktop/login?app=drive&pv=3#payload=abc:cli-drive\n';
@@ -132,4 +166,31 @@ test('extractLoginUrl finds Proton desktop login links', () => {
   assert.equal(extractLoginUrl('no url here'), null);
   assert.equal(isAlreadyLoggedOutMessage('You need to login first'), true);
   assert.equal(isAlreadyLoggedOutMessage('ok'), false);
+});
+
+test('runProton keeps non-ASCII names intact when a character is split across output chunks', async () => {
+  const name = 'café-日本.txt';
+  const result = await withFakeCli(`
+    const buf = Buffer.from(JSON.stringify([{ uid: 'u1', type: 'file', name: { ok: true, value: ${JSON.stringify(name)} } }]));
+    const cut = buf.indexOf(Buffer.from('é')) + 1;
+    process.stdout.write(buf.subarray(0, cut), () => setTimeout(() => process.stdout.write(buf.subarray(cut)), 150));
+  `, () => runProton('list', { path: '/my-files' }));
+  assert.equal(parseListOutput(result.stdout, { requireJson: true })[0].name, name);
+});
+
+test('runProton does not mistake a file name in a JSON listing for a sign-in error', async () => {
+  const listing = JSON.stringify([{ uid: 'u1', type: 'file', name: { ok: true, value: 'why am I not logged in.txt' } }]);
+  const result = await withFakeCli(`process.stdout.write(${JSON.stringify(listing)});`, () => runProton('list', { path: '/my-files' }));
+  assert.equal(parseListOutput(result.stdout, { requireJson: true })[0].name, 'why am I not logged in.txt');
+});
+
+test('runProton still reports a sign-in error printed with a zero exit code', async () => {
+  await assert.rejects(
+    withFakeCli(`process.stdout.write('You need to login first\\n');`, () => runProton('list', { path: '/my-files' })),
+    /need to login/i
+  );
+  await assert.rejects(
+    withFakeCli(`process.stdout.write('[]'); process.stderr.write('Error: unauthenticated\\n');`, () => runProton('list', { path: '/my-files' })),
+    /unauthenticated/i
+  );
 });

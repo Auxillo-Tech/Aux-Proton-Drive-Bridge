@@ -225,6 +225,18 @@ describe('syncDb — SQLite sync metadata database', () => {
     assert.strictEqual(needsSync.length, 2);
   });
 
+  it('lists only the requested states when the caller cannot act on the others', () => {
+    for (let index = 0; index < 60; index++) {
+      db.upsertTrackedFile({ remotePath: `/my-files/remote-only-${index}.jpg`, type: 'file', syncState: 'remote_new' });
+    }
+    db.upsertTrackedFile({ remotePath: '/my-files/edited.txt', type: 'file', syncState: 'synced' });
+    db.upsertTrackedFile({ remotePath: '/my-files/edited.txt', syncState: 'local_modified' });
+    const uploads = db.listFilesNeedingSync(50, ['local_new', 'local_modified', 'pending_upload']);
+    assert.deepStrictEqual(uploads.map(row => row.remote_path), ['/my-files/edited.txt']);
+    assert.strictEqual(db.listFilesNeedingSync(50, []).length, 0);
+    assert.strictEqual(db.listFilesNeedingSync(50).length, 50);
+  });
+
   it('updates sync state', () => {
     db.setSyncState('/my-files/test.txt', 'synced');
     const file = db.getTrackedFileByPath('/my-files/test.txt');

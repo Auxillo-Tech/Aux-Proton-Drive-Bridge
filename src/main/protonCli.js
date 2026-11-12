@@ -1,5 +1,6 @@
 const { spawn } = require('node:child_process');
 const { Worker } = require('node:worker_threads');
+const { StringDecoder } = require('node:string_decoder');
 const path = require('node:path');
 const os = require('node:os');
 const { withProtonProcessLock } = require('./protonProcessLock');
@@ -17,7 +18,7 @@ const activeChildren = new Set();
 
 function normalizeRemotePath(parent, name) {
   const base = String(parent || '/my-files').replace(/\/+$/, '') || '/my-files';
-  const safeName = String(name || '').replace(/\//g, '\/');
+  const safeName = String(name || '');
   return `${base}/${safeName}`;
 }
 
@@ -86,6 +87,8 @@ function parseListOutput(output, options = {}) {
             size: Number(item.activeRevision?.value?.claimedSize ?? item.totalStorageSize ?? item.file?.size ?? item.size ?? 0),
             modified: item.activeRevision?.value?.claimedModificationTime || item.modificationTime || item.modified || null,
             ...(sha1 ? { hash: sha1 } : {}),
+            // The name could not be read; `name` above is only the uid stand-in.
+            ...(item.name?.ok ? {} : { nameUnavailable: true }),
             uid: item.uid || null
           };
         });
@@ -176,9 +179,12 @@ function runProtonNow(action, options = {}, eventSink) {
       activeChildren.delete(child);
       if (error) reject(error); else resolve(result);
     };
+    // Decode per stream so a multi-byte character split across two chunks stays intact.
+    const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') };
     const emit = (stream, data) => {
       if (settled) return;
-      const text = data.toString();
+      const text = typeof data === 'string' ? data : decoders[stream].write(data);
+      if (!text) return;
       if (Buffer.byteLength(stdout) + Buffer.byteLength(stderr) + Buffer.byteLength(text) > MAX_OUTPUT_BYTES) {
         try { child.kill('SIGKILL'); } catch {}
         settle(new Error(`Proton Drive ${action} output exceeded ${MAX_OUTPUT_BYTES} bytes`));
@@ -191,11 +197,19 @@ function runProtonNow(action, options = {}, eventSink) {
     child.stderr.on('data', data => emit('stderr', data));
     child.on('error', error => settle(error));
     child.on('close', (code, signal) => {
+      emit('stdout', decoders.stdout.end());
+      emit('stderr', decoders.stderr.end());
       const result = { code, signal: signal || null, stdout, stderr, command: [bin, ...args] };
       if (code === 0) {
         // Defense: some CLI builds print auth errors with confusing exit codes.
         const combined = `${stdout}\n${stderr}`;
-        if (action !== 'logout' && /need to login|not logged in|unauthenticated/i.test(combined)) {
+        const authPattern = /need to login|not logged in|unauthenticated/i;
+        let authFailure = action !== 'logout' && authPattern.test(combined);
+        if (authFailure && !authPattern.test(stderr)) {
+          // A JSON listing on stdout is data: a file may simply be named that way.
+          try { if (Array.isArray(JSON.parse(stdout))) authFailure = false; } catch {}
+        }
+        if (authFailure) {
           const err = new Error(stderr.trim() || stdout.trim() || 'You need to login first');
           err.result = result;
           settle(err);

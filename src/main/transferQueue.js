@@ -11,6 +11,7 @@
  */
 
 const EventEmitter = require('node:events');
+const { StringDecoder } = require('node:string_decoder');
 const { buildCommand } = require('./protonCli');
 const { parseProgressLine, summarizeTransfer } = require('./progressParser');
 const { withProtonProcessLock } = require('./protonProcessLock');
@@ -250,25 +251,28 @@ function createTransferQueue(options = {}) {
         }
       }
 
+      // Decode per stream so a multi-byte character split across two chunks stays intact.
+      const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') };
+
       child.stdout.on('data', data => {
         if (settled) return;
-        const text = data.toString();
-        if (!appendOutput('stdout', text)) return;
+        const text = typeof data === 'string' ? data : decoders.stdout.write(data);
+        if (!text || !appendOutput('stdout', text)) return;
         consumeOutput('stdout', text);
       });
 
       child.stderr.on('data', data => {
         if (settled) return;
-        const text = data.toString();
-        if (!appendOutput('stderr', text)) return;
+        const text = typeof data === 'string' ? data : decoders.stderr.write(data);
+        if (!text || !appendOutput('stderr', text)) return;
         consumeOutput('stderr', text);
       });
 
       child.on('error', (err) => settle(err));
 
       child.on('close', code => {
-        consumeOutput('stdout', '', true);
-        consumeOutput('stderr', '', true);
+        consumeOutput('stdout', decoders.stdout.end(), true);
+        consumeOutput('stderr', decoders.stderr.end(), true);
         const result = { code, stdout, stderr, command: [bin, ...args] };
 
         if (code === 0) {

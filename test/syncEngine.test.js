@@ -10,6 +10,17 @@ const { createSyncDb } = require('../src/main/syncDb');
 const { createConflictStore } = require('../src/main/conflictStore');
 const { createSyncEngine, SYNC_MODES } = require('../src/main/syncEngine');
 
+// Restores a file's modification time after an edit, as tools that preserve
+// timestamps do. The engine then has only the change time to go on, and the
+// kernel stamps change times from a coarse clock (a few milliseconds per
+// tick), so an edit made in the same tick as the first scan would carry the
+// same change time and these tests would fail at random. Waiting past one
+// tick makes the change time differ, as it does between real scans.
+function restoreMtime(file, mtime) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+  fs.utimesSync(file, mtime, mtime);
+}
+
 describe('syncEngine - end-to-end state orchestration', () => {
   let dir;
   let db;
@@ -81,6 +92,25 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const result = await engine.syncPending();
     assert.strictEqual(result.queued, 2);
     assert.deepEqual(queue.items.map(item => item.action).sort(), ['download', 'upload']);
+  });
+
+  it('still uploads a local edit when 50 or more remote-only files cannot be downloaded in this mode', async () => {
+    for (let index = 0; index < 60; index++) {
+      db.upsertTrackedFile({ remotePath: `/my-files/phone-${index}.jpg`, type: 'file', remoteSize: 10, syncState: 'remote_new' });
+    }
+    const localPath = path.join(dir, 'doc.txt');
+    fs.writeFileSync(localPath, 'edited');
+    // An older, previously synced file has a higher sync_version than the remote-only rows.
+    db.upsertTrackedFile({ remotePath: '/my-files/doc.txt', localPath, type: 'file', syncState: 'synced' });
+    db.upsertTrackedFile({ remotePath: '/my-files/doc.txt', syncState: 'local_modified' });
+    for (const mode of [SYNC_MODES.CONSERVATIVE, SYNC_MODES.ONE_WAY_UPLOAD]) {
+      queue.items.length = 0;
+      db.setSyncState('/my-files/doc.txt', 'local_modified');
+      engine.setMode(mode);
+      const result = await engine.syncPending();
+      assert.strictEqual(result.queued, 1, mode);
+      assert.deepStrictEqual(queue.items.map(item => [item.action, item.options.localPaths]), [['upload', [localPath]]]);
+    }
   });
 
   it('starts the next sync batch immediately after a successful queue drain', async () => {
@@ -373,6 +403,41 @@ describe('syncEngine - end-to-end state orchestration', () => {
     assert.strictEqual(db.getTrackedFileByPath('/my-files/preserved.txt').sync_state, 'synced');
     assert.strictEqual((await engine.syncPending()).queued, 0);
     assert.strictEqual(queue.items.length, 0);
+  });
+
+  it('does not treat a remote item with an unreadable name as a deleted file plus a new file', async () => {
+    const localPath = path.join(dir, 'doc.txt');
+    fs.writeFileSync(localPath, 'abc');
+    const stat = fs.statSync(localPath);
+    db.upsertTrackedFile({
+      remotePath: '/my-files/doc.txt', localPath, type: 'file', size: 3, localSize: 3, remoteSize: 3,
+      localModified: stat.mtime.toISOString(), remoteModified: '2026-08-12T12:00:00Z'
+    });
+    db.markSynced('/my-files/doc.txt');
+    remoteOutput = JSON.stringify([{
+      uid: 'vol~node123', type: 'file', name: { ok: false, error: 'decryption failed' },
+      activeRevision: { value: { claimedSize: 3, claimedModificationTime: '2026-08-12T12:00:00Z' } }
+    }]);
+    const warnings = [];
+    engine.on('warn', payload => warnings.push(payload));
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    const snapshot = await engine.pollRemote();
+    assert.deepStrictEqual(snapshot.items, []);
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/doc.txt').sync_state, 'synced');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/vol~node123'), null);
+    assert.strictEqual(warnings.some(payload => /could not be read/.test(payload.message)), true);
+    await engine.syncPending();
+    assert.deepStrictEqual(queue.items, []);
+  });
+
+  it('still detects a remote deletion when every listed name is readable', async () => {
+    const localPath = path.join(dir, 'gone.txt');
+    fs.writeFileSync(localPath, 'abc');
+    db.upsertTrackedFile({ remotePath: '/my-files/gone.txt', localPath, type: 'file', size: 3, localSize: 3, remoteSize: 3 });
+    db.markSynced('/my-files/gone.txt');
+    remoteOutput = JSON.stringify([{ uid: 'u1', type: 'file', name: { ok: true, value: 'other.txt' } }]);
+    await engine.pollRemote();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/gone.txt').sync_state, 'remote_deleted');
   });
 
   it('detects concurrent local and remote changes against the last synced baseline', async () => {
@@ -1528,6 +1593,237 @@ describe('syncEngine - end-to-end state orchestration', () => {
     assert.strictEqual(db.getTrackedFileByPath('/my-files/missing.txt').sync_state, 'pending_download');
   });
 
+  it('downloads a nested remote file into its own parent folder instead of the sync root', async () => {
+    const rootFile = path.join(dir, 'notes.txt');
+    fs.writeFileSync(rootFile, 'unrelated root file');
+    const nested = path.join(dir, 'A', 'deep', 'notes.txt');
+    db.upsertTrackedFile({ remotePath: '/my-files/A/deep/notes.txt', localPath: nested, type: 'file', remoteSize: 6, syncState: 'remote_new' });
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    await engine.syncPending();
+    const transfer = queue.items[0];
+    assert.deepStrictEqual(transfer.options.paths, ['/my-files/A/deep/notes.txt']);
+    assert.strictEqual(transfer.options.localFolder, path.join(dir, 'A', 'deep'));
+    assert.strictEqual(fs.statSync(path.join(dir, 'A', 'deep')).isDirectory(), true, 'destination folder is created before the transfer');
+
+    // The CLI writes the item by name inside the destination it was given.
+    fs.writeFileSync(path.join(transfer.options.localFolder, 'notes.txt'), 'remote');
+    queue.emit('complete', { id: transfer.id, action: 'download', options: transfer.options, result: { summary: { totalSkipped: 0 } } });
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/A/deep/notes.txt').sync_state, 'synced');
+    assert.strictEqual(fs.readFileSync(rootFile, 'utf8'), 'unrelated root file');
+  });
+
+  it('retries a nested download in the same parent folder so the sync root is never overwritten', async () => {
+    fs.mkdirSync(path.join(dir, 'A'));
+    const nested = path.join(dir, 'A', 'b.txt');
+    db.upsertTrackedFile({ remotePath: '/my-files/A/b.txt', localPath: nested, type: 'file', remoteSize: 9, syncState: 'pending_download' });
+    engine.setMode(SYNC_MODES.ONE_WAY_DOWNLOAD);
+    await engine.syncPending();
+    assert.strictEqual(queue.items[0].options.fileConflictStrategy, 'replace');
+    assert.strictEqual(queue.items[0].options.localFolder, path.join(dir, 'A'));
+  });
+
+  it('downloads a nested remote folder into its parent folder', async () => {
+    const nestedFolder = path.join(dir, 'A', 'sub');
+    db.upsertTrackedFile({ remotePath: '/my-files/A/sub', localPath: nestedFolder, type: 'folder', syncState: 'remote_new' });
+    db.upsertTrackedFile({ remotePath: '/my-files/top', type: 'folder', syncState: 'remote_new' });
+    engine.setMode(SYNC_MODES.ONE_WAY_DOWNLOAD);
+    await engine.syncPending();
+    const byPath = Object.fromEntries(queue.items.map(item => [item.options.paths[0], item.options.localFolder]));
+    assert.strictEqual(byPath['/my-files/A/sub'], path.join(dir, 'A'));
+    assert.strictEqual(byPath['/my-files/top'], dir);
+  });
+
+  it('refuses a nested download whose parent folder is a symbolic link out of the sync folder', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-engine-outside-'));
+    try {
+      fs.symlinkSync(outside, path.join(dir, 'link'));
+      db.upsertTrackedFile({ remotePath: '/my-files/link/file.txt', localPath: path.join(dir, 'link', 'file.txt'), type: 'file', remoteSize: 1, syncState: 'remote_new' });
+      const errors = [];
+      engine.on('error', payload => errors.push(payload));
+      engine.setMode(SYNC_MODES.ONE_WAY_DOWNLOAD);
+      await engine.syncPending();
+      assert.strictEqual(queue.items.length, 0);
+      assert.strictEqual(errors.length, 1);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  for (const outcome of ['error', 'cancelled', 'skipped']) {
+    it(`keeps conflicted and locally changed files in a folder when the folder download ends as ${outcome}`, async () => {
+      const folder = path.join(dir, 'P');
+      fs.mkdirSync(folder);
+      const conflicted = path.join(folder, 'c.txt');
+      const edited = path.join(folder, 'd.txt');
+      fs.writeFileSync(conflicted, 'local edit that must survive');
+      fs.writeFileSync(edited, 'another local edit');
+      db.upsertTrackedFile({ remotePath: '/my-files/P', localPath: folder, type: 'folder', syncState: 'remote_modified' });
+      db.upsertTrackedFile({ remotePath: '/my-files/P/c.txt', localPath: conflicted, type: 'file', remoteSize: 9, syncState: 'conflict' });
+      db.upsertTrackedFile({ remotePath: '/my-files/P/d.txt', localPath: edited, type: 'file', syncState: 'local_modified' });
+      engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+      await engine.syncPending();
+      const download = queue.items.find(item => item.action === 'download');
+      assert.deepStrictEqual(download.options.paths, ['/my-files/P']);
+      const editedStateBefore = db.getTrackedFileByPath('/my-files/P/d.txt').sync_state;
+
+      queue.emit(outcome, {
+        id: download.id, action: 'download', options: download.options, error: 'network timeout',
+        result: { summary: { totalSkipped: 1 } }
+      });
+      assert.strictEqual(db.getTrackedFileByPath('/my-files/P/c.txt').sync_state, 'conflict');
+      assert.strictEqual(db.getTrackedFileByPath('/my-files/P/d.txt').sync_state, editedStateBefore);
+      assert.notStrictEqual(db.getTrackedFileByPath('/my-files/P').sync_state, 'downloading');
+    });
+  }
+
+  it('never retries a folder download with a strategy that replaces the files inside it', async () => {
+    const folder = path.join(dir, 'P');
+    fs.mkdirSync(folder);
+    db.upsertTrackedFile({ remotePath: '/my-files/P', localPath: folder, type: 'folder', syncState: 'pending_download' });
+    db.upsertTrackedFile({ remotePath: '/my-files/single.txt', localPath: path.join(dir, 'single.txt'), type: 'file', syncState: 'pending_download' });
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    await engine.syncPending();
+    const strategies = Object.fromEntries(queue.items.map(item => [item.options.paths[0], item.options.fileConflictStrategy]));
+    assert.deepStrictEqual(strategies, { '/my-files/P': 'skip', '/my-files/single.txt': 'replace' });
+  });
+
+  it('settles only download-waiting files when a folder download completes', async () => {
+    const folder = path.join(dir, 'P');
+    fs.mkdirSync(folder);
+    const conflicted = path.join(folder, 'c.txt');
+    const edited = path.join(folder, 'd.txt');
+    const fresh = path.join(folder, 'n.txt');
+    fs.writeFileSync(conflicted, '123456789');
+    fs.writeFileSync(edited, '123456789');
+    db.upsertTrackedFile({ remotePath: '/my-files/P', localPath: folder, type: 'folder', syncState: 'pending_download' });
+    db.upsertTrackedFile({ remotePath: '/my-files/P/c.txt', localPath: conflicted, type: 'file', remoteSize: 9, syncState: 'conflict' });
+    db.upsertTrackedFile({ remotePath: '/my-files/P/d.txt', localPath: edited, type: 'file', remoteSize: 9, syncState: 'local_modified' });
+    db.upsertTrackedFile({ remotePath: '/my-files/P/n.txt', localPath: fresh, type: 'file', remoteSize: 3, syncState: 'remote_new' });
+    engine.setMode(SYNC_MODES.ONE_WAY_DOWNLOAD);
+    await engine.syncPending();
+    const download = queue.items.find(item => item.options.paths?.[0] === '/my-files/P');
+    fs.writeFileSync(fresh, 'new');
+    queue.emit('complete', { id: download.id, action: 'download', options: download.options, result: { summary: { totalSkipped: 0 } } });
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/P').sync_state, 'synced');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/P/n.txt').sync_state, 'synced');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/P/c.txt').sync_state, 'conflict');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/P/d.txt').sync_state, 'local_modified');
+  });
+
+  it('keeps the state of files inside a folder when the folder upload fails', async () => {
+    const folder = path.join(dir, 'F');
+    fs.mkdirSync(folder);
+    const remoteChanged = path.join(folder, 'x.txt');
+    const conflicted = path.join(folder, 'y.txt');
+    fs.writeFileSync(remoteChanged, 'x');
+    fs.writeFileSync(conflicted, 'y');
+    db.upsertTrackedFile({ remotePath: '/my-files/F', localPath: folder, type: 'folder', syncState: 'local_new' });
+    db.upsertTrackedFile({ remotePath: '/my-files/F/x.txt', localPath: remoteChanged, type: 'file', syncState: 'remote_modified' });
+    db.upsertTrackedFile({ remotePath: '/my-files/F/y.txt', localPath: conflicted, type: 'file', syncState: 'conflict' });
+    engine.setMode(SYNC_MODES.CONSERVATIVE);
+    await engine.syncPending();
+    const upload = queue.items[0];
+    assert.deepStrictEqual(upload.options.localPaths, [folder]);
+    queue.emit('error', { id: upload.id, action: 'upload', options: upload.options, error: 'network timeout' });
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/F').sync_state, 'pending_upload');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/F/x.txt').sync_state, 'remote_modified');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/F/y.txt').sync_state, 'conflict');
+  });
+
+  it('does not upload the leftover of an interrupted first download over the remote file', async () => {
+    remoteOutput = JSON.stringify([{
+      name: { ok: true, value: 'big.bin' }, type: 'file',
+      activeRevision: { value: { claimedSize: 1000, claimedModificationTime: '2026-08-12T12:00:00Z' } }
+    }]);
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    await engine.runSyncCycle();
+    const download = queue.items.find(item => item.action === 'download');
+    assert.deepStrictEqual(download.options.paths, ['/my-files/big.bin']);
+
+    // The transfer is interrupted and a partial file is left at the final path.
+    fs.writeFileSync(path.join(dir, 'big.bin'), Buffer.alloc(400, 1));
+    queue.emit('cancelled', { id: download.id, action: 'download', options: download.options });
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/big.bin').sync_state, 'pending_download');
+
+    await engine.runSyncCycle();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/big.bin').sync_state, 'conflict');
+    assert.strictEqual(store.listActive().length, 1);
+    assert.deepStrictEqual(queue.items.filter(item => item.options.localPaths?.includes(path.join(dir, 'big.bin'))), []);
+  });
+
+  it('does not upload a file recreated locally while its restore download is still owed', async () => {
+    const localPath = path.join(dir, 'restored.txt');
+    fs.writeFileSync(localPath, 'original');
+    const stat = fs.statSync(localPath);
+    db.upsertTrackedFile({
+      remotePath: '/my-files/restored.txt', localPath, type: 'file', size: stat.size, localSize: stat.size, remoteSize: stat.size,
+      localModified: stat.mtime.toISOString(), remoteModified: '2026-08-12T12:00:00Z'
+    });
+    db.markSynced('/my-files/restored.txt');
+    db.setSyncState('/my-files/restored.txt', 'pending_download');
+    fs.writeFileSync(localPath, 'partial');
+    remoteOutput = JSON.stringify([{
+      name: { ok: true, value: 'restored.txt' }, type: 'file',
+      activeRevision: { value: { claimedSize: stat.size, claimedModificationTime: '2026-08-12T12:00:00Z' } }
+    }]);
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    await engine.runSyncCycle();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/restored.txt').sync_state, 'conflict');
+    assert.deepStrictEqual(queue.items.filter(item => item.options.localPaths?.includes(localPath)), []);
+  });
+
+  it('pairs a fully downloaded file left by an interrupted download when the verified digest matches', async () => {
+    const digest = crypto.createHash('sha1').update('complete').digest('hex');
+    remoteOutput = JSON.stringify([{
+      name: { ok: true, value: 'done.txt' }, type: 'file',
+      activeRevision: { value: {
+        claimedSize: 8, claimedModificationTime: '2026-08-12T12:00:00Z',
+        claimedDigests: { sha1: digest, sha1Verified: true }
+      } }
+    }]);
+    // A sync folder of its own, so the test database is not itself a changing synced file.
+    const sub = path.join(dir, 'interrupted-root');
+    fs.mkdirSync(sub);
+    engine.destroy();
+    engine = createSyncEngine({
+      syncDb: db,
+      transferQueue: queue,
+      conflictStore: store,
+      localFolder: sub,
+      getStatus: async () => ({ installed: true, authenticated: true, busy: false }),
+      runProton: async () => ({ code: 0, stdout: remoteOutput, stderr: '' })
+    });
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    await engine.runSyncCycle();
+    assert.strictEqual(queue.items.length, 1);
+    const download = queue.items[0];
+    fs.writeFileSync(path.join(sub, 'done.txt'), 'complete');
+    queue.emit('cancelled', { id: download.id, action: 'download', options: download.options });
+
+    await engine.runSyncCycle();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/done.txt').sync_state, 'synced');
+    assert.strictEqual(store.listActive().length, 0);
+    assert.strictEqual(queue.items.length, 1, 'nothing is uploaded or downloaded again');
+  });
+
+  it('still retries an owed download over a local file that has not changed', async () => {
+    const localPath = path.join(dir, 'stale.txt');
+    fs.writeFileSync(localPath, 'old');
+    const stat = fs.statSync(localPath);
+    db.upsertTrackedFile({
+      remotePath: '/my-files/stale.txt', localPath, type: 'file', size: stat.size, localSize: stat.size, remoteSize: 5,
+      localModified: stat.mtime.toISOString(), syncState: 'pending_download'
+    });
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    await engine.scanLocalTree();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/stale.txt').sync_state, 'pending_download');
+    await engine.syncPending();
+    assert.deepStrictEqual(
+      queue.items.filter(item => item.action === 'download').map(item => [item.options.paths[0], item.options.fileConflictStrategy]),
+      [['/my-files/stale.txt', 'replace']]
+    );
+  });
+
   it('ignores manual queue completions not owned by the sync engine', () => {
     const localPath = path.join(dir, 'manual.txt');
     fs.writeFileSync(localPath, 'manual');
@@ -1627,11 +1923,17 @@ describe('syncEngine - end-to-end state orchestration', () => {
         return listGate;
       }
     });
-    engine.start(SYNC_MODES.BIDIRECTIONAL, dir, 60000);
+    // The file and its synced row exist before sync starts and the row carries the file's
+    // real modification time. Created after start, the first scan could run before or after
+    // these lines and sometimes saw the file as locally modified, failing this test at random.
     const trackedPath = path.join(dir, 'tracked.txt');
     fs.writeFileSync(trackedPath, 'tracked');
-    db.upsertTrackedFile({ remotePath: '/my-files/tracked.txt', localPath: trackedPath, type: 'file', localSize: 7, remoteSize: 7 });
+    db.upsertTrackedFile({
+      remotePath: '/my-files/tracked.txt', localPath: trackedPath, type: 'file', localSize: 7, remoteSize: 7,
+      localModified: fs.statSync(trackedPath).mtime.toISOString()
+    });
     db.markSynced('/my-files/tracked.txt');
+    engine.start(SYNC_MODES.BIDIRECTIONAL, dir, 60000);
     while (listCalls === 0) await new Promise(resolve => setTimeout(resolve, 1));
     const stopped = engine.stop();
     releaseList({ stdout: JSON.stringify([{ name: 'nested', type: 'folder', modified: '2026-01-01T00:00:00Z', size: 0 }]) });
@@ -1692,6 +1994,18 @@ describe('syncEngine - end-to-end state orchestration', () => {
     return engine;
   }
 
+  it('keeps a backslash in a local file name instead of treating it as a folder separator', async () => {
+    const localPath = path.join(dir, 'a\\b.txt');
+    fs.writeFileSync(localPath, 'x');
+    engine.setMode(SYNC_MODES.ONE_WAY_UPLOAD);
+    await engine.scanLocalTree();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/a/b.txt'), null);
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/a\\b.txt')?.local_path, localPath);
+    await engine.syncPending();
+    const upload = queue.items.find(item => item.options.localPaths?.includes(localPath));
+    assert.strictEqual(upload.options.parentPath, '/my-files');
+  });
+
   it('skips locally scanned files that match user ignore patterns', async () => {
     const sub = path.join(dir, 'tree');
     createEngineForTree(sub, ['node_modules', '*.iso', 'Videos/**']);
@@ -1737,6 +2051,40 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const tracked = db.listTrackedFiles().map(item => item.remote_path);
     assert.deepEqual(tracked, ['/my-files/keep.txt']);
     assert.deepEqual(listedPaths, ['/my-files']);
+  });
+
+  it('does not upload a synced file again after the user excludes it', async () => {
+    const localPath = path.join(dir, 'x.log');
+    fs.writeFileSync(localPath, 'abc');
+    const stat = fs.statSync(localPath);
+    db.upsertTrackedFile({
+      remotePath: '/my-files/x.log', localPath, type: 'file', size: 3, localSize: 3, remoteSize: 3,
+      localModified: stat.mtime.toISOString(), remoteModified: '2026-08-12T12:00:00Z'
+    });
+    db.markSynced('/my-files/x.log');
+    remoteOutput = JSON.stringify([
+      { name: { ok: true, value: 'x.log' }, type: 'file', activeRevision: { value: { claimedSize: 3, claimedModificationTime: '2026-08-12T12:00:00Z' } } }
+    ]);
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    engine.setIgnorePatterns(['*.log']);
+    await engine.pollRemote();
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/x.log').sync_state, 'synced');
+    await engine.syncPending();
+    assert.deepStrictEqual(queue.items, []);
+  });
+
+  it('drops pending work for a tracked file the user has since excluded', async () => {
+    const localPath = path.join(dir, 'y.log');
+    fs.writeFileSync(localPath, 'edited');
+    db.upsertTrackedFile({ remotePath: '/my-files/y.log', localPath, type: 'file', syncState: 'local_modified' });
+    db.upsertTrackedFile({ remotePath: '/my-files/z.log', type: 'file', syncState: 'remote_new' });
+    engine.setMode(SYNC_MODES.BIDIRECTIONAL);
+    engine.setIgnorePatterns(['*.log']);
+    const result = await engine.syncPending();
+    assert.strictEqual(result.queued, 0);
+    assert.deepStrictEqual(queue.items, []);
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/y.log').sync_state, 'ignored');
+    assert.strictEqual(db.getTrackedFileByPath('/my-files/z.log').sync_state, 'ignored');
   });
 
   it('applies updated ignore patterns live and reports them in state', async () => {
@@ -1881,7 +2229,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     db.markSynced('/my-files/same.txt');
 
     fs.writeFileSync(file, 'other');
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     await engine.scanLocalTree(sub);
 
     assert.strictEqual(db.getTrackedFileByPath('/my-files/same.txt').sync_state, 'local_modified');
@@ -1899,7 +2247,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const fd = fs.openSync(file, 'r+');
     fs.writeSync(fd, Buffer.from('z'), 0, 1, 68 * 1024);
     fs.closeSync(fd);
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     await engine.scanLocalTree(sub);
 
     assert.strictEqual(db.getTrackedFileByPath('/my-files/large.txt').sync_state, 'local_modified');
@@ -1919,7 +2267,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const fd = fs.openSync(file, 'r+');
     fs.writeSync(fd, Buffer.from('z'), 0, 1, 100 * 1024 * 1024);
     fs.closeSync(fd);
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     await engine.scanLocalTree(sub);
 
     assert.strictEqual(db.getTrackedFileByPath('/my-files/large.bin').sync_state, 'local_modified');
@@ -1953,7 +2301,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     assert.strictEqual(db.getTrackedFileByPath('/my-files/concurrent.txt').sync_state, 'remote_modified');
 
     fs.writeFileSync(file, 'other');
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     await engine.scanLocalTree(sub);
 
     const conflicted = db.getTrackedFileByPath('/my-files/concurrent.txt');
@@ -1980,7 +2328,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     db.markSynced('/my-files/concurrent.txt');
 
     fs.writeFileSync(file, 'other');
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     await engine.scanLocalTree(sub);
     assert.strictEqual(db.getTrackedFileByPath('/my-files/concurrent.txt').sync_state, 'local_modified');
 
@@ -2008,7 +2356,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const file = path.join(sub, 'legacy.txt');
     fs.writeFileSync(file, 'AAAAAA');
     const originalMtime = new Date('2026-08-03T09:00:00.000Z');
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     await engine.scanLocalTree(sub);
     db.upsertTrackedFile({
       remotePath: '/my-files/legacy.txt',
@@ -2047,7 +2395,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const afterRemote = db.getTrackedFileByPath('/my-files/legacy.txt');
     assert.strictEqual(afterRemote.sync_state, 'remote_modified', 'unknown remote baseline was silently blessed');
     fs.writeFileSync(file, 'BBBBBB');
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     await engine.scanLocalTree(sub);
     const result = await engine.syncPending();
     assert.strictEqual(db.getTrackedFileByPath('/my-files/legacy.txt').sync_state, 'conflict');
@@ -2077,7 +2425,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const fd = fs.openSync(file, 'r+');
     fs.writeSync(fd, Buffer.from('z'), 0, 1, 68 * 1024);
     fs.closeSync(fd);
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     db.upsertTrackedFile({
       remotePath: '/my-files/legacy.bin',
       remoteModified: '2026-08-03T10:00:00.000Z',
@@ -2118,7 +2466,7 @@ describe('syncEngine - end-to-end state orchestration', () => {
     const fd = fs.openSync(file, 'r+');
     fs.writeSync(fd, Buffer.from('z'), 0, 1, 100 * 1024 * 1024);
     fs.closeSync(fd);
-    fs.utimesSync(file, originalMtime, originalMtime);
+    restoreMtime(file, originalMtime);
     db.upsertTrackedFile({
       remotePath: '/my-files/legacy-large.bin',
       remoteModified: '2026-08-03T10:00:00.000Z',

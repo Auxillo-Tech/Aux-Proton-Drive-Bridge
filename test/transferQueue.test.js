@@ -193,6 +193,23 @@ describe('transferQueue — execution safety', () => {
     await queue.destroy();
   });
 
+  it('keeps non-ASCII file names intact when a character is split across output chunks', async () => {
+    const line = Buffer.from('✓ café-日本.txt\n');
+    const cut = line.indexOf(Buffer.from('é')) + 1;
+    const queue = createTransferQueue({ concurrency: 1, retryDelayMs: 0, spawn: scriptedSpawn([
+      { code: 0, stdout: [line.subarray(0, cut), line.subarray(cut)] }
+    ]) });
+    const completed = new Promise((resolve, reject) => {
+      queue.on('complete', resolve);
+      queue.on('error', payload => reject(new Error(payload.error)));
+    });
+    queue.enqueue('download', { paths: ['/my-files/café-日本.txt'], localFolder: '/tmp', retries: 1 });
+    const payload = await completed;
+    assert.deepStrictEqual(payload.result.summary.completed.map(entry => entry.name), ['café-日本.txt']);
+    assert.strictEqual(payload.result.stdout, '✓ café-日本.txt\n');
+    await queue.destroy();
+  });
+
   it('treats the transfer timeout as an inactivity limit and resets it on progress', async () => {
     const spawn = () => {
       const child = new EventEmitter();

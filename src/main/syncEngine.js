@@ -2,7 +2,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { DEFAULT_LOCAL_FOLDER, getStatus, normalizeRemotePath, parseListOutputAsync, runProton } = require('./protonCli');
-const { isPathInside } = require('./pathSafety');
+const { assertSafePathInside, isPathInside } = require('./pathSafety');
 
 const SYNC_MODES = Object.freeze({
   ONE_WAY_UPLOAD: 'one-way-upload',
@@ -166,7 +166,8 @@ function createSyncEngine(options = {}) {
   }
 
   function shouldIgnore(relativePath) {
-    const normalized = String(relativePath || '').replace(/\\/g, '/');
+    // A backslash is an ordinary file-name character on Linux, not a path separator.
+    const normalized = String(relativePath || '');
     if (normalized.split('/').some(part => !part || part.startsWith('.')) ||
       normalized.endsWith('.tmp') || normalized.endsWith('.swp') || normalized.endsWith('~')) return true;
     if (!ignoreMatchers.length) return false;
@@ -181,7 +182,7 @@ function createSyncEngine(options = {}) {
   }
 
   function safeRemotePath(relativePath) {
-    const parts = String(relativePath).replace(/\\/g, '/').split('/').filter(Boolean);
+    const parts = String(relativePath).split('/').filter(Boolean);
     return parts.reduce((parent, part) => normalizeRemotePath(parent, part), '/my-files');
   }
 
@@ -314,6 +315,22 @@ function createSyncEngine(options = {}) {
     }
 
     if (['downloading', 'conflict'].includes(existing.sync_state)) return remotePath;
+
+    // A local file that appears or changes while its download is still owed (for example the
+    // leftover of an interrupted download) is not a local edit to upload over the remote copy.
+    // Hold it as a conflict; identical content is paired again by the verified-digest check.
+    if (existing.sync_state === 'pending_download') {
+      const differsFromKnownLocal = existing.local_modified !== local.modified ||
+        Number(existing.local_size ?? existing.size ?? 0) !== Number(local.size || 0) ||
+        Boolean(existing.local_hash && local.hash && existing.local_hash !== local.hash);
+      if (differsFromKnownLocal) {
+        recordConflict(local, {
+          path: remotePath, modified: existing.remote_modified, size: existing.remote_size ?? existing.size,
+          hash: existing.remote_hash, type: existing.type
+        }, null);
+      }
+      return remotePath;
+    }
 
     // Local edit while a transfer is still in flight (before post-upload verification starts):
     // cancel into reupload-pending so we do not bind verification to post-edit bytes later.
@@ -504,7 +521,7 @@ function createSyncEngine(options = {}) {
     }
   }
 
-  async function listRemoteTree(root = '/my-files', expectedGeneration = null, onBatch = null) {
+  async function listRemoteTree(root = '/my-files', expectedGeneration = null, onBatch = null, report = {}) {
     const pending = [{ remotePath: root, segments: [], depth: 0 }];
     const all = [];
     let inspectedCount = 0;
@@ -549,6 +566,12 @@ function createSyncEngine(options = {}) {
           throwIfCancelled(expectedGeneration, 'Remote traversal cancelled');
         }
         if (!item?.name || item.name === '.' || item.name === '..') continue;
+        // An item whose name could not be read cannot be matched to a path. Leave it out and
+        // report it, so the caller knows this listing does not show everything.
+        if (item.nameUnavailable) {
+          report.unreadableNames = (report.unreadableNames || 0) + 1;
+          continue;
+        }
         if (all.length >= MAX_REMOTE_ITEMS) throw new Error(`Remote tree exceeded ${MAX_REMOTE_ITEMS} items`);
         const remotePath = normalizeRemotePath(current.remotePath, item.name);
         // Exclude patterns fence both directions: an ignored remote item is
@@ -1137,6 +1160,7 @@ function createSyncEngine(options = {}) {
       message: 'Starting remote listing'
     });
 
+    const listingReport = {};
     const items = await listRemoteTree('/my-files', expectedGeneration, async (batch, folderPath) => {
       if (authoritativeRequestSuperseded(expectedRequestVersion)) return;
       setActivity({
@@ -1159,7 +1183,7 @@ function createSyncEngine(options = {}) {
         conflictsOpened: conflictsTotal,
         message: `Remote ${seen.size} listed · ${pairedTotal} paired · ${conflictsTotal} conflicts`
       });
-    });
+    }, listingReport);
     const supersededSnapshot = () => ({ authoritative: true, items, superseded: true });
     if (authoritativeRequestSuperseded(expectedRequestVersion)) return supersededSnapshot();
 
@@ -1171,7 +1195,15 @@ function createSyncEngine(options = {}) {
       message: 'Checking for remote deletions'
     });
     let checkedTrackedItems = 0;
-    for (const existing of syncDb.listTrackedFiles()) {
+    // A tracked item missing from a listing with unreadable names may be one of those
+    // unreadable items, so nothing is treated as deleted on Proton Drive in that pass.
+    if (listingReport.unreadableNames) {
+      emit('warn', {
+        source: 'pollRemote',
+        message: `Skipping remote deletion check: ${listingReport.unreadableNames} remote item name(s) could not be read`
+      });
+    }
+    for (const existing of listingReport.unreadableNames ? [] : syncDb.listTrackedFiles()) {
       if (checkedTrackedItems > 0 && checkedTrackedItems % SCAN_YIELD_EVERY === 0) {
         await yieldToEventLoop();
         throwIfCancelled(expectedGeneration, 'Remote poll cancelled');
@@ -1179,6 +1211,8 @@ function createSyncEngine(options = {}) {
       }
       checkedTrackedItems++;
       if (existing.remote_path === '__checkpoint__' || !existing.remote_path.startsWith('/my-files/')) continue;
+      // Excluded items are left out of the listing on purpose; their absence is not a deletion.
+      if (shouldIgnore(existing.remote_path.slice('/my-files/'.length))) continue;
       if (seen.has(existing.remote_path) || ['local_new', 'pending_upload', 'uploading', 'conflict', 'remote_deleted'].includes(existing.sync_state)) continue;
       if (Number(existing.upload_reupload_pending) === 1) continue;
       const local = existing.local_path && fs.existsSync(existing.local_path)
@@ -1224,7 +1258,11 @@ function createSyncEngine(options = {}) {
       const canRestoreRemote = canUpload() && item.local_path && fs.existsSync(item.local_path);
       syncDb.setSyncState(item.remote_path, canRestoreRemote ? 'pending_upload' : 'ignored');
     }
-    const pending = syncDb.listFilesNeedingSync(MAX_BATCH_SIZE);
+    const actionableStates = [
+      ...(canUpload() ? ['local_new', 'local_modified', 'pending_upload'] : []),
+      ...(canDownload() ? ['remote_new', 'remote_modified', 'pending_download'] : [])
+    ];
+    const pending = syncDb.listFilesNeedingSync(MAX_BATCH_SIZE, actionableStates);
     const uploadFolderPaths = new Set(pending
       .filter(item => item.type === 'folder' && ['local_new', 'local_modified', 'pending_upload'].includes(item.sync_state))
       .map(item => item.remote_path));
@@ -1241,6 +1279,11 @@ function createSyncEngine(options = {}) {
     };
     let queued = 0;
     for (const item of pending) {
+      // A tracked item the user has since excluded is not transferred in either direction.
+      if (shouldIgnore(item.remote_path.slice('/my-files/'.length))) {
+        syncDb.setSyncState(item.remote_path, 'ignored');
+        continue;
+      }
       if (canUpload() && ['local_new', 'local_modified', 'pending_upload'].includes(item.sync_state)) {
         if (hasQueuedAncestor(item.remote_path, uploadFolderPaths)) continue;
         if (!item.local_path || !fs.existsSync(item.local_path)) {
@@ -1277,9 +1320,16 @@ function createSyncEngine(options = {}) {
       if (canDownload() && ['remote_new', 'remote_modified', 'pending_download'].includes(item.sync_state)) {
         if (hasQueuedAncestor(item.remote_path, downloadFolderPaths)) continue;
         try {
+          // The CLI places a downloaded item by name inside the destination folder, so the
+          // destination must be the item's own parent folder, not the sync root.
+          const expectedLocalPath = item.local_path || path.join(activeFolder, item.remote_path.slice('/my-files/'.length));
+          const destination = assertSafePathInside(path.dirname(expectedLocalPath), activeFolder, 'Download destination');
+          fs.mkdirSync(destination, { recursive: true });
           const transferId = transferQueue.enqueue('download', {
-            paths: [item.remote_path], localFolder: activeFolder,
-            fileConflictStrategy: item.sync_state === 'pending_download' ? 'replace' : 'skip',
+            paths: [item.remote_path], localFolder: destination,
+            // A retried folder download must not replace files inside it: each of those
+            // files has its own row and its own decision.
+            fileConflictStrategy: item.sync_state === 'pending_download' && item.type !== 'folder' ? 'replace' : 'skip',
             folderConflictStrategy: 'merge', logLevel: 'ERROR'
           }, 'medium');
           syncTransferIds.add(transferId);
@@ -1486,6 +1536,10 @@ function createSyncEngine(options = {}) {
       for (const remotePath of payload.options?.paths || []) {
         const matched = syncDb.listTrackedFiles().filter(item => item.remote_path === remotePath || item.remote_path.startsWith(`${remotePath}/`));
         for (const item of matched) {
+          // A folder download may only settle descendants that were themselves waiting for a
+          // download. Rows holding a conflict, a local change or an upload keep their state.
+          if (item.remote_path !== remotePath &&
+              !['remote_new', 'remote_modified', 'pending_download', 'downloading'].includes(item.sync_state)) continue;
           const expected = item.local_path || path.join(activeFolder, item.remote_path.slice('/my-files/'.length));
           syncDb.upsertTrackedFile({ remotePath: item.remote_path, localPath: expected });
           const downloaded = syncDb.getTrackedFileByPath(item.remote_path);
@@ -1523,19 +1577,20 @@ function createSyncEngine(options = {}) {
     }));
     const restoreFailedTransfer = payload => {
       if (!syncTransferIds.delete(payload.id)) return false;
+      // Only the row this transfer was queued for is put back, and only if the transfer is
+      // what moved it into its in-flight state. Descendants of a folder transfer and rows
+      // that meanwhile hold a conflict or a local/remote change keep their state.
       for (const localPath of payload.options?.localPaths || []) {
-        const prefix = `${path.resolve(localPath)}${path.sep}`;
-        for (const item of syncDb.listTrackedFiles().filter(record => record.local_path === localPath ||
-          (record.local_path && path.resolve(record.local_path).startsWith(prefix)))) {
-          syncDb.setSyncState(item.remote_path, 'pending_upload');
+        for (const item of syncDb.listTrackedFiles().filter(record => record.local_path === localPath)) {
+          if (item.sync_state === 'uploading') syncDb.setSyncState(item.remote_path, 'pending_upload');
           syncDb.logEvent({ fileId: item.id, eventType: 'upload_error', detail: { error: payload.error }, severity: 'error' });
         }
       }
       for (const remotePath of payload.options?.paths || []) {
-        for (const item of syncDb.listTrackedFiles().filter(record => record.remote_path === remotePath || record.remote_path.startsWith(`${remotePath}/`))) {
-          syncDb.setSyncState(item.remote_path, 'pending_download');
-          syncDb.logEvent({ fileId: item.id, eventType: 'download_error', detail: { error: payload.error }, severity: 'error' });
-        }
+        const item = syncDb.getTrackedFileByPath(remotePath);
+        if (!item) continue;
+        if (item.sync_state === 'downloading') syncDb.setSyncState(item.remote_path, 'pending_download');
+        syncDb.logEvent({ fileId: item.id, eventType: 'download_error', detail: { error: payload.error }, severity: 'error' });
       }
       const pendingResolution = pendingResolutions.get(payload.id);
       if (pendingResolution) {

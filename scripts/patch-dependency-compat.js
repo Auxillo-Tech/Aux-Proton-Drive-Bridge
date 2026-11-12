@@ -55,5 +55,9 @@ function patchAndVerify(directory, version) {
 }
 
 walk(root);
-if (!verified.length) throw new Error('No minimatch installations found to verify');
+if (!verified.length) {
+  // minimatch only arrives with the development dependencies; a production-only install has none.
+  console.log('Dependency compatibility: no minimatch installations found, nothing to patch.');
+  process.exit(0);
+}
 console.log(`Dependency compatibility verified for ${verified.length} minimatch installations; patched ${patched.length}.`);

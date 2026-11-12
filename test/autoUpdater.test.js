@@ -5,6 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const http = require('node:http');
+const https = require('node:https');
+const EventEmitter = require('node:events');
 const { createAutoUpdater, detectLinuxPackageType, isSafeAssetName, parseChecksums, releaseKeyId, verifyChecksumManifestSignature, verifyFileSha256 } = require('../src/main/autoUpdater');
 
 describe('autoUpdater — version parsing and comparison', () => {
@@ -213,4 +215,49 @@ it('rejects checksum manifests not signed by the pinned release key', () => {
     signature: crypto.sign(null, Buffer.from(manifest), attacker.privateKey).toString('base64')
   });
   assert.throws(() => verifyChecksumManifestSignature(manifest, envelope, trustedPem), /verification failed/);
+});
+
+describe('autoUpdater — GitHub credentials', () => {
+  // Captures the headers of the update check instead of contacting GitHub.
+  async function headersOfUpdateCheck(env) {
+    const names = ['GH_TOKEN', 'GITHUB_TOKEN', 'AUX_PROTON_DRIVE_DEV_GITHUB_TOKEN', 'PATH'];
+    const saved = Object.fromEntries(names.map(name => [name, process.env[name]]));
+    const originalGet = https.get;
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'updater-gh-'));
+    let captured = null;
+    try {
+      // A stand-in `gh` that would hand out a token if the updater ever asked it.
+      fs.writeFileSync(path.join(binDir, 'gh'), '#!/bin/sh\necho gho_from_gh_command\n', { mode: 0o755 });
+      for (const name of names) delete process.env[name];
+      Object.assign(process.env, { PATH: `${binDir}${path.delimiter}${saved.PATH || ''}` }, env);
+      https.get = (_url, options) => {
+        captured = options.headers;
+        const request = new EventEmitter();
+        request.destroy = () => {};
+        setImmediate(() => request.emit('error', new Error('offline test')));
+        return request;
+      };
+      const updater = createAutoUpdater({ currentVersion: '0.3.0', logger: { info: () => {}, warn: () => {}, error: () => {} } });
+      const result = await updater.checkForUpdates();
+      assert.strictEqual(result.error, 'offline test');
+      return captured;
+    } finally {
+      https.get = originalGet;
+      for (const name of names) {
+        if (saved[name] === undefined) delete process.env[name];
+        else process.env[name] = saved[name];
+      }
+      fs.rmSync(binDir, { recursive: true, force: true });
+    }
+  }
+
+  it('does not send the user\'s GitHub token with an update check', async () => {
+    const headers = await headersOfUpdateCheck({ GH_TOKEN: 'ghp_personal', GITHUB_TOKEN: 'ghp_other' });
+    assert.strictEqual('Authorization' in headers, false);
+  });
+
+  it('sends a token only when the development-only variable is set', async () => {
+    const headers = await headersOfUpdateCheck({ AUX_PROTON_DRIVE_DEV_GITHUB_TOKEN: 'dev-token' });
+    assert.strictEqual(headers.Authorization, 'Bearer dev-token');
+  });
 });

@@ -103,21 +103,13 @@ function createAutoUpdater(options = {}) {
   let updateCheckTimer = null;
   let availableUpdate = null;
   let verifiedDownload = null;
-  let cachedToken = null;
   let checksumCache = null;
 
   function getGitHubToken() {
-    if (cachedToken) return cachedToken;
-    if (process.env.GH_TOKEN) return (cachedToken = process.env.GH_TOKEN);
-    if (process.env.GITHUB_TOKEN) return (cachedToken = process.env.GITHUB_TOKEN);
-    try {
-      const { execFileSync } = require('node:child_process');
-      const token = execFileSync('gh', ['auth', 'token'], {
-        encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore']
-      }).trim();
-      if (token) return (cachedToken = token);
-    } catch {}
-    return null;
+    // Releases are public, so update checks are anonymous. The user's own GitHub login
+    // (GH_TOKEN, GITHUB_TOKEN, the gh command) is never read. A token is sent only when a
+    // developer sets this variable on purpose, for example to test against a private fork.
+    return process.env.AUX_PROTON_DRIVE_DEV_GITHUB_TOKEN || null;
   }
 
   function headersFor(url, accept = 'application/vnd.github+json') {
