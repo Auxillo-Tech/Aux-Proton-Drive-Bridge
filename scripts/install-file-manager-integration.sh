@@ -75,6 +75,8 @@ DESKTOP
 }
 
 install_thunar() {
+  # Thunar passes every selected file in one launch (%F). A desktop entry cannot repeat
+  # --path for each of them, so the files follow --upload as plain absolute paths.
   local actions_dir="${SHARE_DIR}/Thunar/sendto"
   mkdir -p "$actions_dir"
   cat > "${actions_dir}/aux-proton-drive-bridge.desktop" <<DESKTOP
@@ -82,7 +84,7 @@ install_thunar() {
 Type=Application
 Name=Upload to Proton Drive
 Icon=aux-proton-drive-bridge
-Exec="${USER_BIN}" --upload --path %F
+Exec="${USER_BIN}" --upload %F
 MimeType=application/octet-stream;inode/directory;
 DESKTOP
   chmod 644 "${actions_dir}/aux-proton-drive-bridge.desktop"

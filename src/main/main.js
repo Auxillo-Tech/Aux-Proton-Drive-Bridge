@@ -17,6 +17,8 @@ const { refreshUserIcons } = require('./iconRefresh');
 const { buildChildEnv } = require('./childProcessEnv');
 const { createProgressPersistenceGate } = require('./progressPersistence');
 const { detectLinuxGraphicsWorkaround } = require('./linuxGraphics');
+const { parseExternalCommand } = require('./externalCommand');
+const { MAX_UPLOAD_PATHS, partitionUploadPaths, summariseRefused, describeRefused, runUploadCommand } = require('./uploadSelection');
 
 if (process.env.AUX_PROTON_DRIVE_USER_DATA_DIR) {
   app.setPath('userData', path.resolve(process.env.AUX_PROTON_DRIVE_USER_DATA_DIR));
@@ -117,7 +119,7 @@ function validateRemotePath(remotePath, label = 'Remote path') {
 function validateTransferOptions(action, options = {}) {
   if (action === 'upload') {
     const localPaths = Array.isArray(options.localPaths) ? options.localPaths : [];
-    if (!localPaths.length || localPaths.length > 1000) throw new Error('Upload requires between 1 and 1000 local paths');
+    if (!localPaths.length || localPaths.length > MAX_UPLOAD_PATHS) throw new Error(`Upload requires between 1 and ${MAX_UPLOAD_PATHS} local paths (the limit is ${MAX_UPLOAD_PATHS} files per upload)`);
     const safePaths = localPaths.map(localPath => assertGrantedLocalPath(localPath, 'Upload path', { mustExist: true }));
     return {
       localPaths: safePaths,
@@ -140,25 +142,6 @@ function validateTransferOptions(action, options = {}) {
     };
   }
   throw new Error(`Unsupported transfer action: ${action}`);
-}
-
-function parseExternalCommand(argv = []) {
-  const args = argv.map(String);
-  if (args.includes('--install-file-manager-integration')) return { action: 'install-file-manager-integration' };
-  if (args.includes('--upload')) {
-    const localPaths = [];
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === '--path' && args[i + 1]) localPaths.push(args[++i]);
-    }
-    if (!localPaths.length) throw new Error('--upload requires at least one --path argument');
-    return { action: 'upload', localPaths };
-  }
-  const downloadIndex = args.indexOf('--download-here');
-  if (downloadIndex >= 0) {
-    if (!args[downloadIndex + 1]) throw new Error('--download-here requires a folder path');
-    return { action: 'open-download-folder', localFolder: args[downloadIndex + 1] };
-  }
-  return null;
 }
 
 function installFileManagerIntegration() {
@@ -189,16 +172,24 @@ async function handleExternalCommand(argv) {
     return result;
   }
   if (command.action === 'upload') {
-    for (const localPath of command.localPaths) grantLocalPath(localPath, { label: 'Upload path', mustExist: true });
-    const options = validateTransferOptions('upload', {
-      localPaths: command.localPaths,
-      parentPath: '/my-files',
-      fileConflictStrategy: 'skip',
-      folderConflictStrategy: 'merge'
+    // Each path is checked on its own: unusable items are refused by name and reported, the
+    // rest go into one transfer (see uploadSelection.js).
+    return runUploadCommand(command.localPaths, {
+      home: os.homedir(),
+      grant: safePath => grantLocalPath(safePath, { label: 'Upload path', mustExist: true }),
+      enqueue: safePaths => {
+        const options = validateTransferOptions('upload', {
+          localPaths: safePaths,
+          parentPath: '/my-files',
+          fileConflictStrategy: 'skip',
+          folderConflictStrategy: 'merge'
+        });
+        const result = enqueueRecordedTransfer('upload', options, 'medium');
+        showMainWindow();
+        return result;
+      },
+      report: reportRefusedUploads
     });
-    const result = enqueueRecordedTransfer('upload', options, 'medium');
-    showMainWindow();
-    return result;
   }
   externalLocalFolder = grantLocalPath(command.localFolder, { label: 'Download destination', mustExist: true });
   showMainWindow();
@@ -383,6 +374,29 @@ async function recordOperation(action, options, runner) {
     sendProgress({ operationId: op.id, stream: 'stderr', text: errorText });
     throw err;
   }
+}
+
+// Items of an upload selection that were refused: a failed operation in the history, a line in
+// the progress log and a notification. Only the refused items' own names appear.
+function reportRefusedUploads(refused, { announce = true } = {}) {
+  const text = `Not uploaded: ${summariseRefused(refused)}`;
+  try {
+    const store = getOperationStore();
+    const op = store.begin('upload', { refusedItems: refused.length });
+    store.finish(op.id, 'failed', { error: text });
+  } catch {}
+  showMainWindow();
+  if (announce) for (const line of describeRefused(refused)) sendProgress({ stream: 'stderr', text: `Not uploaded: ${line}` });
+  try { new Notification({ title: 'Aux Proton Drive Bridge', body: text.slice(0, 300) }).show(); } catch {}
+}
+
+// File picker results: one unusable item (a link leading out of the home folder, a file removed
+// while the dialog was open) is reported by name and the other selected items stay selected.
+function grantPickedPaths(filePaths, label) {
+  const { good, refused } = partitionUploadPaths(filePaths, { home: os.homedir(), label });
+  for (const line of describeRefused(refused)) sendProgress({ stream: 'stderr', text: `Not selected: ${line}` });
+  if (!good.length && refused.length) throw new Error(`Nothing was selected: ${summariseRefused(refused)}`);
+  return good.map(localPath => grantLocalPath(localPath, { label, mustExist: true }));
 }
 
 function enqueueRecordedTransfer(action, options, priority = 'medium') {
@@ -594,12 +608,12 @@ trustedHandle('proton:chooseLocalFolder', async () => {
 trustedHandle('proton:chooseUploadPaths', async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'openDirectory', 'multiSelections'] });
   if (result.canceled) return [];
-  return result.filePaths.map(localPath => grantLocalPath(localPath, { label: 'Selected upload path', mustExist: true }));
+  return grantPickedPaths(result.filePaths, 'Selected upload path');
 });
 trustedHandle('proton:chooseBackupPaths', async () => {
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'openDirectory', 'multiSelections'] });
   if (result.canceled) return [];
-  return result.filePaths.map(localPath => grantLocalPath(localPath, { label: 'Selected backup path', mustExist: true }));
+  return grantPickedPaths(result.filePaths, 'Selected backup path');
 });
 trustedHandle('proton:openFolder', async (_event, folder) => {
   const target = folder || DEFAULT_LOCAL_FOLDER;
