@@ -91,6 +91,7 @@ function createSyncDb(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_sync_events_time ON sync_events(created_at);
     CREATE INDEX IF NOT EXISTS idx_tracked_state ON tracked_files(sync_state);
     CREATE INDEX IF NOT EXISTS idx_tracked_path ON tracked_files(remote_path);
+    CREATE INDEX IF NOT EXISTS idx_tracked_local_path ON tracked_files(local_path);
     CREATE INDEX IF NOT EXISTS idx_conflicts_status ON conflicts(status);
     CREATE INDEX IF NOT EXISTS idx_conflicts_file ON conflicts(file_id);
   `);
@@ -142,6 +143,20 @@ function createSyncDb(dbPath) {
     return stateFilter
       ? stmt('SELECT * FROM tracked_files WHERE sync_state = ? ORDER BY remote_path').all(stateFilter)
       : stmt('SELECT * FROM tracked_files ORDER BY remote_path').all();
+  }
+
+  // Transfer events look up only the rows they are about; they never read the whole table.
+  function listTrackedFilesByLocalPath(localPath) {
+    return stmt('SELECT * FROM tracked_files WHERE local_path = ? ORDER BY remote_path').all(String(localPath));
+  }
+
+  // The row at remotePath and every row below it. The range is the byte-wise prefix match
+  // `remotePath + '/'`: '0' is the character after '/', so the upper bound is exclusive of the prefix.
+  function listTrackedFilesUnderRemotePath(remotePath) {
+    const base = String(remotePath);
+    return stmt(`SELECT * FROM tracked_files
+      WHERE remote_path = ? OR (remote_path >= ? AND remote_path < ?) ORDER BY remote_path`)
+      .all(base, `${base}/`, `${base}0`);
   }
 
   function listFilesNeedingSync(limit = 50, states = null) {
@@ -549,7 +564,7 @@ function createSyncDb(dbPath) {
 
   return {
     dbPath: resolved,
-    getTrackedFile, getTrackedFileByPath, listTrackedFiles, listFilesNeedingSync,
+    getTrackedFile, getTrackedFileByPath, listTrackedFiles, listTrackedFilesByLocalPath, listTrackedFilesUnderRemotePath, listFilesNeedingSync,
     getStaleItemsByState, upsertTrackedFile, removeTrackedFile, setSyncState, beginUploadVerification,
     cancelUploadVerificationForLocalEdit, clearUploadReuploadPending, adoptRemoteBaselineForReupload,
     setUploadExpectedRemoteHash, rememberOwnUploadDigest, listOwnUploadDigests,

@@ -186,11 +186,12 @@ function createSyncEngine(options = {}) {
     return parts.reduce((parent, part) => normalizeRemotePath(parent, part), '/my-files');
   }
 
-  function localMetadata(filePath, stat) {
+  function localMetadata(filePath, stat, precomputedHash) {
     const isDirectory = stat.isDirectory();
     let hash = null;
     if (!isDirectory) {
-      try { hash = fastHash(filePath); } catch {}
+      if (precomputedHash !== undefined) hash = precomputedHash;
+      else { try { hash = fastHash(filePath); } catch {} }
     }
     return {
       path: filePath,
@@ -199,6 +200,30 @@ function createSyncEngine(options = {}) {
       hash,
       type: isDirectory ? 'folder' : 'file'
     };
+  }
+
+  /**
+   * Like localMetadata, but a file's hash is only read from disk when something asks for
+   * `hash` (and then once). The remote poll builds this for every listed item although most
+   * branches never use the hash: a synced row is only compared on remote metadata.
+   */
+  function localMetadataLazyHash(filePath, stat) {
+    const meta = localMetadata(filePath, stat, null);
+    if (stat.isDirectory()) return meta;
+    let resolved = false;
+    let value = null;
+    Object.defineProperty(meta, 'hash', {
+      enumerable: true,
+      configurable: true,
+      get() {
+        if (!resolved) {
+          resolved = true;
+          try { value = fastHash(filePath); } catch {}
+        }
+        return value;
+      }
+    });
+    return meta;
   }
 
   function fastHash(filePath) {
@@ -954,7 +979,7 @@ function createSyncEngine(options = {}) {
       let local = null;
       try {
         const stat = fs.lstatSync(localPath);
-        if (!stat.isSymbolicLink() && (stat.isFile() || stat.isDirectory())) local = localMetadata(localPath, stat);
+        if (!stat.isSymbolicLink() && (stat.isFile() || stat.isDirectory())) local = localMetadataLazyHash(localPath, stat);
       } catch {}
       const existing = syncDb.getTrackedFileByPath(remotePath);
       if (!existing) {
@@ -1216,7 +1241,7 @@ function createSyncEngine(options = {}) {
       if (seen.has(existing.remote_path) || ['local_new', 'pending_upload', 'uploading', 'conflict', 'remote_deleted'].includes(existing.sync_state)) continue;
       if (Number(existing.upload_reupload_pending) === 1) continue;
       const local = existing.local_path && fs.existsSync(existing.local_path)
-        ? localMetadata(existing.local_path, fs.lstatSync(existing.local_path)) : null;
+        ? localMetadataLazyHash(existing.local_path, fs.lstatSync(existing.local_path)) : null;
       if (local && ['local_modified', 'local_deleted'].includes(existing.sync_state)) {
         recordConflict(local, null, existing);
       } else {
@@ -1439,7 +1464,7 @@ function createSyncEngine(options = {}) {
       const completedUploadPaths = [];
       const verificationJobs = [];
       for (const localPath of payload.options?.localPaths || []) {
-        for (const item of syncDb.listTrackedFiles().filter(record => record.local_path === localPath)) {
+        for (const item of syncDb.listTrackedFilesByLocalPath(localPath)) {
           // Snapshot upload intent before refresh so a quiet post-transfer edit cannot bind
           // verification to the wrong local bytes.
           const before = syncDb.getTrackedFileByPath(item.remote_path);
@@ -1534,7 +1559,7 @@ function createSyncEngine(options = {}) {
         if (completedUploadPaths.length) requestAuthoritativeCycle();
       })().catch(error => emit('error', { source: 'uploadVerificationPin', message: error.message }));
       for (const remotePath of payload.options?.paths || []) {
-        const matched = syncDb.listTrackedFiles().filter(item => item.remote_path === remotePath || item.remote_path.startsWith(`${remotePath}/`));
+        const matched = syncDb.listTrackedFilesUnderRemotePath(remotePath);
         for (const item of matched) {
           // A folder download may only settle descendants that were themselves waiting for a
           // download. Rows holding a conflict, a local change or an upload keep their state.
@@ -1581,7 +1606,7 @@ function createSyncEngine(options = {}) {
       // what moved it into its in-flight state. Descendants of a folder transfer and rows
       // that meanwhile hold a conflict or a local/remote change keep their state.
       for (const localPath of payload.options?.localPaths || []) {
-        for (const item of syncDb.listTrackedFiles().filter(record => record.local_path === localPath)) {
+        for (const item of syncDb.listTrackedFilesByLocalPath(localPath)) {
           if (item.sync_state === 'uploading') syncDb.setSyncState(item.remote_path, 'pending_upload');
           syncDb.logEvent({ fileId: item.id, eventType: 'upload_error', detail: { error: payload.error }, severity: 'error' });
         }
@@ -1610,7 +1635,7 @@ function createSyncEngine(options = {}) {
       const summary = payload.result?.summary || {};
       if (!restoreFailedTransfer({ ...payload, error: `Proton Drive skipped ${summary.totalSkipped || 1} item(s)` })) return;
       for (const localPath of payload.options?.localPaths || []) {
-        const item = syncDb.listTrackedFiles().find(record => record.local_path === localPath);
+        const item = syncDb.listTrackedFilesByLocalPath(localPath)[0];
         if (item) conflictStore?.recordTransferSkipped({ remotePath: item.remote_path, localPath: item.local_path, action: payload.action, summary, type: item.type });
       }
       for (const remotePath of payload.options?.paths || []) {
