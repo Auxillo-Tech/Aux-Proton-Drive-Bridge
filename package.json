@@ -56,7 +56,7 @@
     "electron-builder": "^26.18.0"
   },
   "dependencies": {
-    "better-sqlite3": "13.0.3"
+    "better-sqlite3": "13.1.1"
   },
   "overrides": {
     "@electron/asar": "4.2.1",
